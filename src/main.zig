@@ -30,7 +30,7 @@ pub fn main() !void {
 
     var path_flag: ?[:0]u8 = null;
     var debug_flag = false;
-    var search_query: []const u8 = "";
+    var search_query_buffer = try std.ArrayList(u8).initCapacity(allocator, 8);
 
     std.debug.assert(args.len >= 1);
     var i: usize = 1;
@@ -78,12 +78,12 @@ pub fn main() !void {
             continue;
         }
 
-        if (search_query.len == 0) {
-            search_query = arg;
+        if (search_query_buffer.items.len == 0) {
+            try search_query_buffer.appendSlice(allocator, arg);
         }
     }
 
-    std.log.debug("search query: {s}", .{search_query});
+    std.log.debug("search query: {s}", .{search_query_buffer.items});
 
     if (debug_flag and path_flag != null) {
         std.log.debug("--path: {s}", .{path_flag.?});
@@ -135,24 +135,15 @@ pub fn main() !void {
         tries_absolute_path,
         .{ .iterate = true, .access_sub_paths = false },
     );
-    var tries_iterator = tries_directory.iterate();
     var try_entries = try std.ArrayList(TryEntry).initCapacity(allocator, 32);
-
-    while (try tries_iterator.next()) |entry| {
-        if (entry.kind == .directory) {
-            const path = try std.fs.path.join(
-                allocator,
-                &.{ tries_absolute_path, entry.name },
-            );
-            const creation_date = try Date.from_american_format(entry.name);
-            try try_entries.append(allocator, .{
-                .name = entry.name,
-                .path = path,
-                .creation_date = creation_date,
-                .score = calculateScore(entry.name, search_query, creation_date),
-            });
-        }
-    }
+    var tries_iterator = tries_directory.iterate();
+    try get_entries(
+        allocator,
+        tries_absolute_path,
+        &tries_iterator,
+        &try_entries,
+        search_query_buffer.items,
+    );
 
     var tty = try std.fs.cwd().openFile(
         "/dev/tty",
@@ -177,7 +168,7 @@ pub fn main() !void {
     while (true) {
         _ = try stdout.write(CSI ++ CSICursorToStart);
         _ = try stdout.write(CSI ++ CSIClearScreen);
-        _ = try stdout.print("Search: {s}\n", .{search_query});
+        _ = try stdout.print("Search: {s}\n", .{search_query_buffer.items});
 
         for (try_entries.items, 0..) |try_entry, entry_index| {
             if (selected != null and selected.? == entry_index) {
@@ -197,7 +188,7 @@ pub fn main() !void {
 
         const try_name_from_search = try TryEntry.generate_unique_dir_name(
             allocator,
-            search_query,
+            search_query_buffer.items,
             tries_absolute_path,
         );
 
@@ -208,9 +199,11 @@ pub fn main() !void {
         _ = try stdout.write(CSI ++ CSIGraphicReset);
         try stdout.flush();
 
-        var buffer: [(CSI ++ CSIArrowDown).len]u8 = undefined;
-        _ = try tty.read(&buffer);
-        if (std.mem.eql(u8, buffer[0..], (CSI ++ CSIArrowDown)[0..])) {
+        var buffer: [8]u8 = undefined;
+        const bytes_read = try tty.read(&buffer);
+
+        // Handle arrow keys (escape sequences)
+        if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowDown)) {
             if (try_entries.items.len == 0) continue;
             if (selected == null) {
                 selected = 0;
@@ -219,7 +212,7 @@ pub fn main() !void {
             } else {
                 selected.? += 1;
             }
-        } else if (std.mem.eql(u8, buffer[0..], (CSI ++ CSIArrowUp)[0..])) {
+        } else if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowUp)) {
             if (try_entries.items.len == 0) continue;
             if (selected == null) {
                 selected = try_entries.items.len - 1;
@@ -228,7 +221,7 @@ pub fn main() !void {
             } else {
                 selected.? -= 1;
             }
-        } else if (buffer[0] == 13) {
+        } else if (bytes_read == 1 and buffer[0] == 13) { // Enter key
             if (selected) |selected_index| {
                 _ = try stdout.write(CSI ++ CSICursorToStart);
                 _ = try stdout.write(CSI ++ CSIClearScreen);
@@ -257,6 +250,58 @@ pub fn main() !void {
                 try stdout.flush();
             }
             break;
+        } else if (bytes_read == 1 and buffer[0] == 127) { // Backspace
+            if (search_query_buffer.items.len > 0) {
+                _ = search_query_buffer.pop();
+                try get_entries(
+                    allocator,
+                    tries_absolute_path,
+                    &tries_iterator,
+                    &try_entries,
+                    search_query_buffer.items,
+                );
+                selected = null;
+            }
+        } else if (bytes_read == 1 and buffer[0] >= 32 and buffer[0] <= 126) { // Printable ASCII
+            try search_query_buffer.append(allocator, buffer[0]);
+            try get_entries(
+                allocator,
+                tries_absolute_path,
+                &tries_iterator,
+                &try_entries,
+                search_query_buffer.items,
+            );
+            selected = null;
+        }
+    }
+}
+
+fn get_entries(
+    allocator: std.mem.Allocator,
+    tries_absolute_path: []const u8,
+    tries_iterator: *std.fs.Dir.Iterator,
+    try_entries: *std.ArrayList(TryEntry),
+    search_query: []const u8,
+) !void {
+    tries_iterator.reset();
+    try_entries.clearRetainingCapacity();
+    while (try tries_iterator.next()) |entry| {
+        if (entry.kind == .directory) {
+            const path = try std.fs.path.join(
+                allocator,
+                &.{ tries_absolute_path, entry.name },
+            );
+            const creation_date = try Date.from_american_format(entry.name);
+            try try_entries.append(allocator, .{
+                .name = entry.name,
+                .path = path,
+                .creation_date = creation_date,
+                .score = calculateScore(
+                    entry.name,
+                    search_query,
+                    creation_date,
+                ),
+            });
         }
     }
 }

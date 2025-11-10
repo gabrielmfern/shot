@@ -1,4 +1,10 @@
+# reference
 base.md
 base.rb
+
+# zig stuff
 .zig-cache
 zig-out
+
+# testing
+test_tries

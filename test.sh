@@ -1,2 +1,2 @@
 #!/usr/bin/sh
-zig build run -- $@ --debug --path ./test_tries
+zig build -freference-trace=8 run -- "$@" --debug --path ./test_tries

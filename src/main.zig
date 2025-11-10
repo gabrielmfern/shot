@@ -1,5 +1,9 @@
 const std = @import("std");
 
+const CSI = "\x1b";
+const CSIClearScreen = "[2J";
+const CSICursorToStart = "[H";
+
 pub fn main() !void {
     // This is the total amount of allocations. It also includes the writer buffer for stdout.
     var buffer: [32768]u8 = undefined;
@@ -111,7 +115,7 @@ pub fn main() !void {
     ) catch |err| {
         if (err == error.PathAlreadyExists) {
             if (debug_flag) {
-                std.log.debug("tries path exists", .{});
+                std.log.debug("tries directory exists", .{});
             }
         } else {
             return err;
@@ -120,17 +124,36 @@ pub fn main() !void {
 
     const tries_directory = try std.fs.openDirAbsolute(
         tries_absolute_path,
-        .{ .iterate = true },
+        .{ .iterate = true, .access_sub_paths = false },
     );
-    _ = tries_directory;
+
+    const try_entries = std.ArrayList(TryEntry).initBuffer(buffer: []T)
+
+    try render_search(search_query orelse "", tries_directory, stdout);
 }
 
 const TryEntry = struct {
     name: []const u8,
     path: []const u8,
-    score: f64,
     mtime: i64,
+    score: f64,
 };
+
+fn render_search(search_query: []const u8, tries_directory: std.fs.Dir, writer: *std.io.Writer) !void {
+    _ = try writer.write(CSI ++ CSICursorToStart);
+    _ = try writer.write(CSI ++ CSIClearScreen);
+    _ = try writer.write(search_query);
+    _ = tries_directory;
+
+    // var iterator = tries_directory.iterate();
+    // while (try iterator.next()) |entry| {
+    //     if (entry.kind == .directory) {
+    //         try writer.print("> {s} ({s})", .{entry.name, formatRelativeTime(entry.mtime)});
+    //     }
+    // }
+
+    try writer.flush();
+}
 
 fn calculateScore(text: []const u8, query: []const u8, mtime: i64) f64 {
     var score: f64 = 0.0;

@@ -144,13 +144,12 @@ pub fn main() !void {
                 allocator,
                 &.{ tries_absolute_path, entry.name },
             );
-            const try_name = entry.name["mm-dd-YYYY-".len..];
             const creation_date = try Date.from_american_format(entry.name);
             try try_entries.append(allocator, .{
-                .name = try_name,
+                .name = entry.name,
                 .path = path,
                 .creation_date = creation_date,
-                .score = calculateScore(try_name, search_query, creation_date),
+                .score = calculateScore(entry.name, search_query, creation_date),
             });
         }
     }
@@ -178,29 +177,33 @@ pub fn main() !void {
     while (true) {
         _ = try stdout.write(CSI ++ CSICursorToStart);
         _ = try stdout.write(CSI ++ CSIClearScreen);
-        _ = try stdout.print("  Searching for: {s}\n", .{search_query});
+        _ = try stdout.print("Search: {s}\n", .{search_query});
 
         for (try_entries.items, 0..) |try_entry, entry_index| {
             if (selected != null and selected.? == entry_index) {
-                _ = try stdout.write(CSI ++ CSIForeground(120));
+                _ = try stdout.write(CSI ++ CSIForeground(255));
+            } else {
+                _ = try stdout.write(CSI ++ CSIDim);
             }
-            _ = try stdout.print("> {s}\n", .{try_entry.name});
-            if (selected != null and selected.? == entry_index) {
-                _ = try stdout.write(CSI ++ CSIGraphicReset);
-            }
+            _ = try stdout.print("  > {s}\n", .{try_entry.name});
+            _ = try stdout.write(CSI ++ CSIGraphicReset);
         }
 
         if (selected == null) {
-            _ = try stdout.write(CSI ++ CSIForeground(120));
+            _ = try stdout.write(CSI ++ CSIForeground(226));
         } else {
             _ = try stdout.write(CSI ++ CSIDim);
         }
+
+        const try_name_from_search = try TryEntry.generate_unique_dir_name(
+            allocator,
+            search_query,
+            tries_absolute_path,
+        );
+
         _ = try stdout.print(
-            "+ Create {s}-{s}\n",
-            .{
-                try Date.from_timestamp(std.time.timestamp()).to_american_format(allocator),
-                search_query,
-            },
+            "  Create {s}\n",
+            .{try_name_from_search},
         );
         _ = try stdout.write(CSI ++ CSIGraphicReset);
         try stdout.flush();
@@ -239,21 +242,9 @@ pub fn main() !void {
                 ));
                 try stdout.flush();
             } else {
-                const date = Date.from_timestamp(std.time.timestamp());
                 const absolute_path = try std.fs.path.join(
                     allocator,
-                    &.{
-                        tries_absolute_path,
-                        try std.mem.concat(
-                            allocator,
-                            u8,
-                            &.{
-                                try date.to_american_format(allocator),
-                                "-",
-                                search_query,
-                            },
-                        ),
-                    },
+                    &.{ tries_absolute_path, try_name_from_search },
                 );
                 try std.fs.makeDirAbsolute(absolute_path);
                 _ = try stdout.write(CSI ++ CSICursorToStart);
@@ -275,6 +266,60 @@ const TryEntry = struct {
     path: []const u8,
     creation_date: Date,
     score: f64,
+
+    fn generate_unique_dir_name(
+        allocator: std.mem.Allocator,
+        name: []const u8,
+        base_path: []const u8,
+    ) ![]const u8 {
+        const date = Date.from_timestamp(std.time.timestamp());
+        const date_prefixed_name = try std.mem.concat(
+            allocator,
+            u8,
+            &.{
+                try date.to_american_format(allocator),
+                "-",
+                name,
+            },
+        );
+
+        const date_prefixed_path = try std.fs.path.join(
+            allocator,
+            &.{ base_path, date_prefixed_name },
+        );
+
+        std.fs.accessAbsolute(
+            date_prefixed_path,
+            .{},
+        ) catch |err| {
+            if (err == error.FileNotFound) {
+                return date_prefixed_name;
+            }
+            return err;
+        };
+
+        var candidate_number: usize = 2;
+        while (file_doesnt_exist: {
+            const candidate_name = try std.fmt.allocPrint(
+                allocator,
+                "{s}-{d}",
+                .{ date_prefixed_name, candidate_number },
+            );
+            const candidate_path = try std.fs.path.join(
+                allocator,
+                &.{ base_path, candidate_name },
+            );
+            std.fs.accessAbsolute(candidate_path, .{}) catch |err| {
+                if (err == error.FileNotFound) {
+                    return candidate_name;
+                }
+                return err;
+            };
+            break :file_doesnt_exist true;
+        }) {
+            candidate_number += 1;
+        }
+    }
 };
 
 const Date = struct {

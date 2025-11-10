@@ -17,7 +17,12 @@ pub fn main() !void {
     var debug_flag = false;
     var search_query: ?[]const u8 = null;
 
-    for (args, 0..) |arg, i| {
+    std.debug.assert(args.len >= 1);
+    var i: usize = 1;
+    while (i < args.len) {
+        defer i += 1;
+        const arg = args[i];
+
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             _ = try stdout.write(
                 \\A zig-written version of try (https://github.com/tobi/try). It's also compatible with try.
@@ -50,6 +55,7 @@ pub fn main() !void {
                 return;
             }
             path_flag = args[i + 1];
+            i += 1;
             continue;
         }
         if (std.mem.eql(u8, arg, "--debug")) {
@@ -62,6 +68,10 @@ pub fn main() !void {
         }
     }
 
+    if (debug_flag and search_query != null) {
+        std.log.debug("search query: {s}", .{search_query.?});
+    }
+
     if (debug_flag and path_flag != null) {
         std.log.debug("--path: {s}", .{path_flag.?});
     }
@@ -70,31 +80,49 @@ pub fn main() !void {
 
     const cwd = try std.process.getCwdAlloc(allocator);
     if (debug_flag) {
-        std.log.debug("CWD {s}", .{cwd});
+        std.log.debug("CWD: {s}", .{cwd});
     }
 
-    var tries_path: []const u8 = try std.fs.path.join(allocator, &.{ cwd, "tries" });
+    var tries_absolute_path: []const u8 = try std.fs.path.join(allocator, &.{ cwd, "tries" });
     if (path_flag) |path| {
         if (std.fs.path.isAbsolute(path)) {
-            tries_path = path;
+            tries_absolute_path = path;
         } else {
-            tries_path = try std.fs.path.resolve(allocator, &.{ cwd, path });
+            tries_absolute_path = try std.fs.path.resolve(allocator, &.{ cwd, path });
         }
     } else if (env_map.get("TRY_PATH")) |TRY_PATH| {
         if (debug_flag) {
             std.log.debug("TRY_PATH {s}", .{TRY_PATH});
         }
-        tries_path = TRY_PATH;
+        tries_absolute_path = TRY_PATH;
     } else if (env_map.get("HOME")) |HOME| {
         if (debug_flag) {
             std.log.debug("HOME {s}", .{HOME});
         }
-        tries_path = try std.fs.path.join(allocator, &.{ HOME, "src/tries" });
+        tries_absolute_path = try std.fs.path.join(allocator, &.{ HOME, "src/tries" });
     }
 
     if (debug_flag) {
-        std.log.debug("final tries path: {s}", .{tries_path});
+        std.log.debug("final tries absolute path: {s}", .{tries_absolute_path});
     }
+
+    std.fs.makeDirAbsolute(
+        tries_absolute_path,
+    ) catch |err| {
+        if (err == error.PathAlreadyExists) {
+            if (debug_flag) {
+                std.log.debug("tries path exists", .{});
+            }
+        } else {
+            return err;
+        }
+    };
+
+    const tries_directory = try std.fs.openDirAbsolute(
+        tries_absolute_path,
+        .{ .iterate = true },
+    );
+    _ = tries_directory;
 }
 
 const TryEntry = struct {

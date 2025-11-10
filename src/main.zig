@@ -227,7 +227,17 @@ pub fn main() !void {
             }
         } else if (buffer[0] == 13) {
             if (selected) |selected_index| {
-                try std.process.changeCurDir(try_entries.items[selected_index].path);
+                _ = try stdout.write(CSI ++ CSICursorToStart);
+                _ = try stdout.write(CSI ++ CSIClearScreen);
+                _ = try stdout.write(try std.mem.concat(
+                    allocator,
+                    u8,
+                    &.{
+                        "cd ",
+                        try_entries.items[selected_index].path,
+                    },
+                ));
+                try stdout.flush();
             } else {
                 const date = Date.from_timestamp(std.time.timestamp());
                 const absolute_path = try std.fs.path.join(
@@ -246,7 +256,14 @@ pub fn main() !void {
                     },
                 );
                 try std.fs.makeDirAbsolute(absolute_path);
-                try std.process.changeCurDir(absolute_path);
+                _ = try stdout.write(CSI ++ CSICursorToStart);
+                _ = try stdout.write(CSI ++ CSIClearScreen);
+                _ = try stdout.write(try std.mem.concat(
+                    allocator,
+                    u8,
+                    &.{ "cd ", absolute_path },
+                ));
+                try stdout.flush();
             }
             break;
         }

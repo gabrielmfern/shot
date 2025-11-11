@@ -4,7 +4,8 @@ const CSI = "\x1b[";
 const CSIClearScreen = "2J";
 const CSICursorToStart = "H";
 const CSIDim = "2m";
-const CSIDimReset = "22m";
+const CSIBold = "1m";
+const CSIDimAndBoldReset = "22m";
 inline fn CSIForeground(comptime color_id: u8) *const [std.fmt.count("38;5;{d}m", .{color_id})]u8 {
     return std.fmt.comptimePrint("38;5;{d}m", .{color_id});
 }
@@ -170,20 +171,17 @@ pub fn main() !void {
         _ = try stdout.write(CSI ++ CSIClearScreen);
         _ = try stdout.print("Search: {s}\n", .{search_query_buffer.items});
 
+        const can_create = search_query_buffer.items.len > 0;
+
         for (try_entries.items, 0..) |try_entry, entry_index| {
             if (selected != null and selected.? == entry_index) {
-                _ = try stdout.write(CSI ++ CSIForeground(255));
+                _ = try stdout.write(CSI ++ CSIForeground(228));
+                _ = try stdout.write(CSI ++ CSIBold);
             } else {
                 _ = try stdout.write(CSI ++ CSIDim);
             }
             _ = try stdout.print("  > {s}\n", .{try_entry.name});
             _ = try stdout.write(CSI ++ CSIGraphicReset);
-        }
-
-        if (selected == null) {
-            _ = try stdout.write(CSI ++ CSIForeground(226));
-        } else {
-            _ = try stdout.write(CSI ++ CSIDim);
         }
 
         const try_name_from_search = try TryEntry.generate_unique_dir_name(
@@ -192,11 +190,20 @@ pub fn main() !void {
             tries_absolute_path,
         );
 
-        _ = try stdout.print(
-            "  Create {s}\n",
-            .{try_name_from_search},
-        );
-        _ = try stdout.write(CSI ++ CSIGraphicReset);
+        if (can_create) {
+            if (selected == null) {
+                _ = try stdout.write(CSI ++ CSIForeground(228));
+                _ = try stdout.write(CSI ++ CSIBold);
+            } else {
+                _ = try stdout.write(CSI ++ CSIDim);
+            }
+
+            _ = try stdout.print(
+                "  Create {s}\n",
+                .{try_name_from_search},
+            );
+            _ = try stdout.write(CSI ++ CSIGraphicReset);
+        }
         try stdout.flush();
 
         var buffer: [8]u8 = undefined;
@@ -234,7 +241,8 @@ pub fn main() !void {
                     },
                 ));
                 try stdout.flush();
-            } else {
+                break;
+            } else if (can_create) {
                 const absolute_path = try std.fs.path.join(
                     allocator,
                     &.{ tries_absolute_path, try_name_from_search },
@@ -248,8 +256,8 @@ pub fn main() !void {
                     &.{ "cd ", absolute_path },
                 ));
                 try stdout.flush();
+                break;
             }
-            break;
         } else if (bytes_read == 1 and buffer[0] == 127) { // Backspace
             if (search_query_buffer.items.len > 0) {
                 _ = search_query_buffer.pop();
@@ -263,6 +271,9 @@ pub fn main() !void {
                 selected = null;
             }
         } else if (bytes_read == 1 and buffer[0] >= 32 and buffer[0] <= 126) { // Printable ASCII
+            if (buffer[0] == ' ' and search_query_buffer.items.len == 0) {
+                continue;
+            }
             try search_query_buffer.append(allocator, buffer[0]);
             try get_entries(
                 allocator,
@@ -296,7 +307,7 @@ fn get_entries(
                 .name = entry.name,
                 .path = path,
                 .creation_date = creation_date,
-                .score = calculateScore(
+                .score = calculate_try_score(
                     entry.name,
                     search_query,
                     creation_date,
@@ -304,6 +315,17 @@ fn get_entries(
             });
         }
     }
+
+    std.mem.sort(
+        TryEntry,
+        try_entries.items,
+        void{},
+        (struct {
+            fn lessThan(_: void, a: TryEntry, b: TryEntry) bool {
+                return a.score < b.score;
+            }
+        }).lessThan,
+    );
 }
 
 const TryEntry = struct {
@@ -377,11 +399,11 @@ const Date = struct {
 
         // Calculate days for complete years
         for (std.time.epoch.epoch_year..self.year) |year| {
-            days += if (isLeapYear(@intCast(year))) 366 else 365;
+            days += if (is_leap_year(@intCast(year))) 366 else 365;
         }
 
         // Calculate days for complete months in the current year
-        const days_in_months = if (isLeapYear(self.year))
+        const days_in_months = if (is_leap_year(self.year))
             [_]u16{ 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
         else
             [_]u16{ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
@@ -427,14 +449,14 @@ const Date = struct {
 
         // Handle leap years and calculate year
         while (true) {
-            const days_in_year: u32 = if (isLeapYear(year)) @intCast(366) else @intCast(365);
+            const days_in_year: u32 = if (is_leap_year(year)) @intCast(366) else @intCast(365);
             if (remaining_days < days_in_year) break;
             remaining_days -= days_in_year;
             year += 1;
         }
 
         // Calculate month and day
-        const days_in_months = if (isLeapYear(year))
+        const days_in_months = if (is_leap_year(year))
             [_]u16{ 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
         else
             [_]u16{ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
@@ -463,15 +485,15 @@ test "Date.from" {
     try std.testing.expectEqual(date, Date.from_timestamp(date.get_timestamp()));
 }
 
-fn isLeapYear(year: u16) bool {
+fn is_leap_year(year: u16) bool {
     return (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0);
 }
 
-fn calculateScore(try_name: []const u8, query: []const u8, date: Date) f64 {
+fn calculate_try_score(try_name: []const u8, query: []const u8, date: Date) f64 {
     var score: f64 = 0.0;
 
     if (query.len > 0) {
-        score += matchScore(try_name, query);
+        score += searching_score(try_name, query);
         if (score <= 0) return 0.0;
     } else {
         score += 1.0;
@@ -484,7 +506,7 @@ fn calculateScore(try_name: []const u8, query: []const u8, date: Date) f64 {
     return score;
 }
 
-fn matchScore(text: []const u8, query: []const u8) f64 {
+fn searching_score(text: []const u8, query: []const u8) f64 {
     if (std.ascii.indexOfIgnoreCase(text, query) != null) {
         return 10.0;
     }
@@ -508,24 +530,4 @@ fn matchScore(text: []const u8, query: []const u8) f64 {
     if (query_idx < query.len) return 0.0;
 
     return score;
-}
-
-fn formatRelativeTime(timestamp: i64) []const u8 {
-    const now = std.time.timestamp();
-    const seconds = now - timestamp;
-    const minutes = @divTrunc(seconds, 60);
-    const hours = @divTrunc(minutes, 60);
-    const days = @divTrunc(hours, 24);
-
-    if (seconds < 10) {
-        return "now";
-    } else if (minutes < 60) {
-        return "recent";
-    } else if (hours < 24) {
-        return "today";
-    } else if (days < 7) {
-        return "week";
-    } else {
-        return "old";
-    }
 }

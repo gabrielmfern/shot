@@ -205,7 +205,7 @@ pub fn main() !void {
         }
 
         _ = try stdout.write("─────────────────────────────────────────────\n");
-        _ = try stdout.print(" > {s}\n", .{search_query_buffer.items});
+        _ = try stdout.print(" > {s}", .{search_query_buffer.items});
 
         try stdout.flush();
 

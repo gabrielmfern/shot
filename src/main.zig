@@ -169,7 +169,6 @@ pub fn main() !void {
     while (true) {
         _ = try stdout.write(CSI ++ CSICursorToStart);
         _ = try stdout.write(CSI ++ CSIClearScreen);
-        _ = try stdout.print("Search: {s}\n", .{search_query_buffer.items});
 
         const can_create = search_query_buffer.items.len > 0;
 
@@ -204,6 +203,10 @@ pub fn main() !void {
             );
             _ = try stdout.write(CSI ++ CSIGraphicReset);
         }
+
+        _ = try stdout.write("─────────────────────────────────────────────\n");
+        _ = try stdout.print(" > {s}\n", .{search_query_buffer.items});
+
         try stdout.flush();
 
         var buffer: [8]u8 = undefined;

@@ -22,3 +22,10 @@
 ## Memory Management
 - Don't cleanup any resources, just allocate it endlessly, and let the Arena clean it up
 - Pass allocators explicitly to functions that need them
+
+## Zig-Specific Details
+- **ArrayList operations**: Methods like `appendSlice()` require an allocator parameter: `try list.appendSlice(allocator, items)`
+- **Function parameters**: When passing writers or other interfaces, use `anytype` for generic parameters
+- **Error handling**: Functions that can fail should return error unions (e.g., `!ParsedArgs`)
+- **Struct initialization**: Use explicit field assignment: `ParsedArgs{ .field = value, ... }`
+- **Optional types**: Use `?Type` syntax and handle with `if (optional) |value|` or `optional.?`

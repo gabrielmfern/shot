@@ -1,23 +1,9 @@
 const std = @import("std");
 
-const CSI = "\x1b[";
-const CSIClearScreen = "2J";
-const CSICursorToStart = "H";
-const CSIDim = "2m";
-const CSIBold = "1m";
-const CSIDimAndBoldReset = "22m";
-inline fn CSIForeground(comptime color_id: u8) *const [std.fmt.count("38;5;{d}m", .{color_id})]u8 {
-    return std.fmt.comptimePrint("38;5;{d}m", .{color_id});
-}
-inline fn CSIBackground(comptime color_id: u8) *const [std.fmt.count("48;5;{d}m", .{color_id})]u8 {
-    return std.fmt.comptimePrint("48;5;{d}m", .{color_id});
-}
-const CSIGraphicReset = "0m";
-
-const CSIArrowUp = "A";
-const CSIArrowDown = "B";
-const CSIArrowRight = "C";
-const CSIArrowLeft = "D";
+const Framework = @import("framework.zig");
+const components = @import("components.zig");
+const text_input = components.text_input;
+const list = components.list;
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -164,120 +150,43 @@ pub fn main() !void {
     raw.iflag.ISTRIP = false;
     try std.posix.tcsetattr(tty.handle, .FLUSH, raw);
 
-    var selected: ?usize = null;
+    try Framework.init(allocator, stdout, tty);
 
     while (true) {
-        _ = try stdout.write(CSI ++ CSICursorToStart);
-        _ = try stdout.write(CSI ++ CSIClearScreen);
+        try Framework.write(Framework.CSI ++ Framework.CSICursorToStart);
+        try Framework.write(Framework.CSI ++ Framework.CSIClearScreen);
 
         const can_create = search_query_buffer.items.len > 0;
-
-        for (try_entries.items, 0..) |try_entry, entry_index| {
-            if (selected != null and selected.? == entry_index) {
-                _ = try stdout.write(CSI ++ CSIForeground(228));
-                _ = try stdout.write(CSI ++ CSIBold);
-            } else {
-                _ = try stdout.write(CSI ++ CSIDim);
-            }
-            _ = try stdout.print("  > {s}\n", .{try_entry.name});
-            _ = try stdout.write(CSI ++ CSIGraphicReset);
-        }
-
         const try_name_from_search = try TryEntry.generate_unique_dir_name(
             allocator,
             search_query_buffer.items,
             tries_absolute_path,
         );
 
-        if (can_create) {
-            if (selected == null) {
-                _ = try stdout.write(CSI ++ CSIForeground(228));
-                _ = try stdout.write(CSI ++ CSIBold);
-            } else {
-                _ = try stdout.write(CSI ++ CSIDim);
-            }
+        const selected = try Framework.use_state(usize, 1);
 
-            _ = try stdout.print(
-                "  Create {s}\n",
-                .{try_name_from_search},
-            );
-            _ = try stdout.write(CSI ++ CSIGraphicReset);
-        }
+        try list(
+            selected,
+            if (can_create) try_entries.items.len + 1 else try_entries.items.len,
+            .{ try_entries.items, try_name_from_search },
+            (struct {
+                fn render_entry(
+                    index: usize,
+                    context: std.meta.Tuple(&.{ []TryEntry, []const u8 }),
+                ) anyerror!void {
+                    const entries, const new_entry_name = context;
+                    if (index < entries.len) {
+                        try Framework.print("  > {s}\n", .{entries[index].name});
+                    } else {
+                        try Framework.print("  Create {s}\n", .{new_entry_name});
+                    }
+                }
+            }).render_entry,
+        );
 
-        _ = try stdout.write("─────────────────────────────────────────────\n");
-        _ = try stdout.print(" > {s}", .{search_query_buffer.items});
-
-        try stdout.flush();
-
-        var buffer: [8]u8 = undefined;
-        const bytes_read = try tty.read(&buffer);
-
-        // Handle arrow keys (escape sequences)
-        if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowDown)) {
-            if (try_entries.items.len == 0) continue;
-            if (selected == null) {
-                selected = 0;
-            } else if (selected == try_entries.items.len - 1) {
-                selected = null;
-            } else {
-                selected.? += 1;
-            }
-        } else if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowUp)) {
-            if (try_entries.items.len == 0) continue;
-            if (selected == null) {
-                selected = try_entries.items.len - 1;
-            } else if (selected == 0) {
-                selected = null;
-            } else {
-                selected.? -= 1;
-            }
-        } else if (bytes_read == 1 and buffer[0] == 13) { // Enter key
-            if (selected) |selected_index| {
-                _ = try stdout.write(CSI ++ CSICursorToStart);
-                _ = try stdout.write(CSI ++ CSIClearScreen);
-                _ = try stdout.write(try std.mem.concat(
-                    allocator,
-                    u8,
-                    &.{
-                        "cd ",
-                        try_entries.items[selected_index].path,
-                    },
-                ));
-                try stdout.flush();
-                break;
-            } else if (can_create) {
-                const absolute_path = try std.fs.path.join(
-                    allocator,
-                    &.{ tries_absolute_path, try_name_from_search },
-                );
-                try std.fs.makeDirAbsolute(absolute_path);
-                _ = try stdout.write(CSI ++ CSICursorToStart);
-                _ = try stdout.write(CSI ++ CSIClearScreen);
-                _ = try stdout.write(try std.mem.concat(
-                    allocator,
-                    u8,
-                    &.{ "cd ", absolute_path },
-                ));
-                try stdout.flush();
-                break;
-            }
-        } else if (bytes_read == 1 and buffer[0] == 127) { // Backspace
-            if (search_query_buffer.items.len > 0) {
-                _ = search_query_buffer.pop();
-                try get_entries(
-                    allocator,
-                    tries_absolute_path,
-                    &tries_iterator,
-                    &try_entries,
-                    search_query_buffer.items,
-                );
-                selected = null;
-            }
-        } else if (bytes_read == 1 and buffer[0] >= 32 and buffer[0] <= 126) { // Printable ASCII
-            if (buffer[0] == ' ' and search_query_buffer.items.len == 0) {
-                continue;
-            }
-            try search_query_buffer.append(allocator, buffer[0]);
+        try Framework.write("─────────────────────────────────────────────\n");
+        const search_changed = try text_input(&search_query_buffer);
+        if (search_changed) {
             try get_entries(
                 allocator,
                 tries_absolute_path,
@@ -285,8 +194,16 @@ pub fn main() !void {
                 &try_entries,
                 search_query_buffer.items,
             );
-            selected = null;
+            if (can_create) {
+                selected.* = try_entries.items.len;
+            } else {
+                selected.* = 0;
+            }
         }
+
+        try stdout.flush();
+
+        try Framework.tick();
     }
 }
 

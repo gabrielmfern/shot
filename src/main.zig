@@ -222,6 +222,9 @@ fn get_entries(
                 allocator,
                 &.{ tries_absolute_path, entry.name },
             );
+            const dir = try std.fs.openDirAbsolute(path, .{});
+            const stat = try dir.stat();
+
             const creation_date = try Date.from_american_format(entry.name);
             try try_entries.append(allocator, .{
                 .name = entry.name,
@@ -230,7 +233,7 @@ fn get_entries(
                 .score = calculate_try_score(
                     entry.name,
                     search_query,
-                    creation_date,
+                    @intCast(@divTrunc(stat.atime, std.time.ns_per_s)),
                 ),
             });
         }
@@ -409,7 +412,7 @@ fn is_leap_year(year: u16) bool {
     return (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0);
 }
 
-fn calculate_try_score(try_name: []const u8, query: []const u8, date: Date) f64 {
+fn calculate_try_score(try_name: []const u8, query: []const u8, last_access_timestamp: i64) f64 {
     var score: f64 = 0.0;
 
     if (query.len > 0) {
@@ -419,11 +422,37 @@ fn calculate_try_score(try_name: []const u8, query: []const u8, date: Date) f64 
         score += 1.0;
     }
 
-    const now = std.time.s_per_day;
-    const hours_since_access = @as(f64, @floatFromInt(now - date.get_timestamp())) / std.time.s_per_hour;
+    const now = std.time.timestamp();
+    const hours_since_access = @as(f64, @floatFromInt(now - last_access_timestamp)) / std.time.s_per_hour;
     score += 3.0 / @sqrt(hours_since_access + 1.0);
 
     return score;
+}
+
+test "calculate_try_score" {
+    const score1 = calculate_try_score(
+        "2024-01-01-stuff",
+        "stuff",
+        std.time.timestamp() - (2 * std.time.s_per_hour),
+    );
+    const score2 = calculate_try_score(
+        "2024-01-01-stuff-2",
+        "2",
+        std.time.timestamp() - (2 * std.time.s_per_hour),
+    );
+    try std.testing.expect(score1 == score2);
+
+    const score3 = calculate_try_score(
+        "2024-01-01-try",
+        "",
+        std.time.timestamp() - (10 * std.time.s_per_hour),
+    );
+    const score4 = calculate_try_score(
+        "2024-01-01-try-2",
+        "",
+        std.time.timestamp() - (2 * std.time.s_per_hour),
+    );
+    try std.testing.expect(score4 > score3);
 }
 
 fn searching_score(text: []const u8, query: []const u8) f64 {

@@ -19,6 +19,8 @@ pub const CSIArrowDown = "B";
 pub const CSIArrowRight = "C";
 pub const CSIArrowLeft = "D";
 
+arena: std.heap.ArenaAllocator,
+
 allocator: std.mem.Allocator,
 stdout: *std.io.Writer,
 tty: std.fs.File,
@@ -27,7 +29,12 @@ states: std.ArrayList(*anyopaque),
 /// The current index that will be used for the call of `use_state` in this tick
 state_cursor_index: usize,
 
-last_input: ?Input,
+tick_input_handlers: std.ArrayList(InputHandler),
+
+const InputHandler = struct {
+    context: *anyopaque,
+    call_handler: fn (context: *anyopaque, input: Input) !void,
+};
 
 /// This only includes the few keys that we're using, it does not at all, include all of the possible values
 pub const Input = union(enum) {
@@ -50,6 +57,8 @@ pub fn init(
     tty: std.fs.File,
 ) !void {
     self = .{
+        .arena = std.heap.ArenaAllocator.init(allocator),
+
         .allocator = allocator,
         .stdout = stdout,
         .tty = tty,
@@ -57,7 +66,7 @@ pub fn init(
         .states = try std.ArrayList(*anyopaque).initCapacity(allocator, 0),
         .state_cursor_index = 0,
 
-        .last_input = null,
+        .tick_input_handlers = try std.ArrayList(*anyopaque).initCapacity(allocator, 0),
     };
 }
 
@@ -89,17 +98,27 @@ pub fn tick() !void {
     var buffer: [8]u8 = undefined;
     const bytes_read = try self.tty.read(&buffer);
 
-    if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowDown)) {
-        self.last_input = .{ .action = .ArrowDown };
-    } else if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowUp)) {
-        self.last_input = .{ .action = .ArrowUp };
-    } else if (bytes_read == 1 and buffer[0] == 13) {
-        self.last_input = .{ .action = .Enter };
-    } else if (bytes_read == 1 and buffer[0] == 127) {
-        self.last_input = .{ .action = .Backspace };
-    } else if (bytes_read == 1 and buffer[0] >= 32 and buffer[0] <= 126) {
-        self.last_input = .{ .printable_ascii = buffer[0] };
+    if (blk: {
+        if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowDown)) {
+            break :blk .{ .action = .ArrowDown };
+        } else if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowUp)) {
+            break :blk .{ .action = .ArrowUp };
+        } else if (bytes_read == 1 and buffer[0] == 13) {
+            break :blk .{ .action = .Enter };
+        } else if (bytes_read == 1 and buffer[0] == 127) {
+            break :blk .{ .action = .Backspace };
+        } else if (bytes_read == 1 and buffer[0] >= 32 and buffer[0] <= 126) {
+            break :blk .{ .printable_ascii = buffer[0] };
+        }
+        break :blk null;
+    }) |input| {
+        for (self.tick_input_handlers.items) |handler| {
+            try handler.call_handler(handler.context, input.?);
+        }
     }
+
+    self.tick_input_handlers.clearRetainingCapacity();
+    self.arena.reset(.retain_capacity);
 }
 
 pub fn use_state(T: type, initial_value: T) !*T {
@@ -115,6 +134,23 @@ pub fn use_state(T: type, initial_value: T) !*T {
     }
 }
 
-pub fn use_input() ?Input {
-    return self.last_input;
+pub fn use_input_handler(
+    context: anytype,
+    comptime handler: fn (context: @TypeOf(context), input: Input) anyerror!void,
+) !void {
+    const allocator = self.arena.allocator();
+    const owned_context = try allocator.create(@TypeOf(context));
+    owned_context.* = context;
+
+    try self.tick_input_handlers.append(
+        self.allocator,
+        .{
+            .context = @ptrCast(@alignCast(owned_context)),
+            .handler = (struct {
+                fn call_handler(any_ctx: *anyopaque, input: Input) anyerror!void {
+                    try handler(@ptrCast(@alignCast(any_ctx)), input);
+                }
+            }).call_handler,
+        },
+    );
 }

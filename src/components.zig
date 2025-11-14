@@ -32,15 +32,18 @@ pub fn list(
         context: @TypeOf(render_context),
     ) anyerror!void,
 ) !void {
-    if (Framework.use_input()) |input| {
-        if (input == .action) {
-            if (input.action == .ArrowDown) {
-                selected.* = (selected.* + 1) % item_count;
-            } else if (input.action == .ArrowUp) {
-                selected.* = if (selected.* == 0) item_count - 1 else selected.* - 1;
+    const input_context = .{ selected, item_count };
+    try Framework.use_input_handler(input_context, (struct {
+        fn handle(context: @TypeOf(input_context), input: Framework.Input) anyerror!void {
+            if (input == .action) {
+                if (input.action == .ArrowDown) {
+                    context.selected.* = (context.selected.* + 1) % context.item_count;
+                } else if (input.action == .ArrowUp) {
+                    context.selected.* = if (context.selected.* == 0) context.item_count - 1 else context.selected.* - 1;
+                }
             }
         }
-    }
+    }).handle);
 
     if (item_count > 0) {
         for (0..item_count) |i| {

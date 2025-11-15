@@ -221,6 +221,32 @@ pub fn main() !void {
         try stdout.flush();
 
         try Framework.tick();
+
+        if (Framework.use_last_input()) |last_input| {
+            if (last_input == .action and last_input.action == .Enter) {
+                if (can_create and selected.* == try_entries.items.len) {
+                    const path = try std.fs.path.join(allocator, &.{
+                        tries_absolute_path,
+                        try_name_from_search,
+                    });
+                    try std.fs.makeDirAbsolute(path);
+
+                    try Framework.write(Framework.CSI ++ Framework.CSICursorToStart);
+                    try Framework.write(Framework.CSI ++ Framework.CSIClearScreen);
+                    try Framework.print("cd {s}", .{path});
+                    try stdout.flush();
+                    break;
+                } else if (try_entries.items.len > 0) {
+                    try std.fs.makeDirAbsolute(try_name_from_search);
+
+                    try Framework.write(Framework.CSI ++ Framework.CSICursorToStart);
+                    try Framework.write(Framework.CSI ++ Framework.CSIClearScreen);
+                    try Framework.print("cd {s}", .{try_entries.items[selected.*].path});
+                    try stdout.flush();
+                    break;
+                }
+            }
+        }
     }
 }
 

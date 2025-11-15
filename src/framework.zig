@@ -30,6 +30,7 @@ states: std.ArrayList(*anyopaque),
 state_cursor_index: usize,
 
 tick_input_handlers: std.ArrayList(InputHandler),
+last_input: ?Input,
 
 const InputHandler = struct {
     context: *anyopaque,
@@ -67,6 +68,7 @@ pub fn init(
         .state_cursor_index = 0,
 
         .tick_input_handlers = try std.ArrayList(InputHandler).initCapacity(allocator, 0),
+        .last_input = null,
     };
 }
 
@@ -111,6 +113,8 @@ pub fn tick() !void {
         input = Input{ .printable_ascii = buffer[0] };
     }
 
+    self.last_input = input;
+
     if (input != null) {
         for (self.tick_input_handlers.items) |handler| {
             try handler.call_handler(handler.context, input.?);
@@ -132,6 +136,10 @@ pub fn use_state(T: type, initial_value: T) !*T {
 
         return actual_state;
     }
+}
+
+pub fn use_last_input() ?Input {
+    return self.last_input;
 }
 
 pub fn use_input_handler(

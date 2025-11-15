@@ -2,25 +2,31 @@ const std = @import("std");
 
 const Framework = @import("framework.zig");
 
-pub fn text_input(value: *std.ArrayList(u8)) !bool {
-    const allocator = Framework.use_allocator();
-
-    var did_change = false;
-    if (Framework.use_input()) |input| {
-        if (input == .action and input.action == .Backspace) {
-            _ = value.pop();
-        } else if (input == .printable_ascii) {
-            const char = input.printable_ascii;
-            if (char != ' ' or value.items.len != 0) {
-                try value.append(allocator, char);
-                did_change = true;
+pub fn text_input(
+    value: *std.ArrayList(u8),
+    on_change_context: anytype,
+    on_change: fn (context: @TypeOf(on_change_context), new_value: *std.ArrayList(u8)) anyerror!void,
+) !void {
+    const input_handler_context = .{ .on_change_context = on_change_context, .on_change = on_change, .value = value };
+    try Framework.use_input_handler(input_handler_context, (struct {
+        fn handler(
+            context: *@TypeOf(input_handler_context),
+            input: Framework.Input,
+        ) anyerror!void {
+            if (input == .action and input.action == .Backspace) {
+                _ = context.value.pop();
+                try context.on_change(context.on_change_context, context.value);
+            } else if (input == .printable_ascii) {
+                const char = input.printable_ascii;
+                if (char != ' ' or context.value.items.len != 0) {
+                    try context.value.append(Framework.use_allocator(), char);
+                    try context.on_change(context.on_change_context, context.value);
+                }
             }
         }
-    }
+    }).handler);
 
     try Framework.print(" > {s}", .{value.items});
-
-    return did_change;
 }
 
 pub fn list(
@@ -32,9 +38,9 @@ pub fn list(
         context: @TypeOf(render_context),
     ) anyerror!void,
 ) !void {
-    const input_context = .{ selected, item_count };
+    const input_context = .{ .selected = selected, .item_count = item_count };
     try Framework.use_input_handler(input_context, (struct {
-        fn handle(context: @TypeOf(input_context), input: Framework.Input) anyerror!void {
+        fn handle(context: *@TypeOf(input_context), input: Framework.Input) anyerror!void {
             if (input == .action) {
                 if (input.action == .ArrowDown) {
                     context.selected.* = (context.selected.* + 1) % context.item_count;

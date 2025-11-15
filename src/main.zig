@@ -185,21 +185,38 @@ pub fn main() !void {
         );
 
         try Framework.write("─────────────────────────────────────────────\n");
-        const search_changed = try text_input(&search_query_buffer);
-        if (search_changed) {
-            try get_entries(
-                allocator,
-                tries_absolute_path,
-                &tries_iterator,
-                &try_entries,
-                search_query_buffer.items,
-            );
-            if (can_create) {
-                selected.* = try_entries.items.len;
-            } else {
-                selected.* = 0;
-            }
-        }
+        const search_changed_context = .{
+            .tries_absolute_path = tries_absolute_path,
+            .tries_iterator = &tries_iterator,
+            .try_entries = &try_entries,
+            .search_query_buffer = search_query_buffer,
+            .can_create = can_create,
+            .selected = selected,
+        };
+        try text_input(
+            &search_query_buffer,
+            search_changed_context,
+            (struct {
+                fn on_change(
+                    context: @TypeOf(search_changed_context),
+                    value: *std.ArrayList(u8),
+                ) anyerror!void {
+                    _ = value;
+                    try get_entries(
+                        Framework.use_allocator(),
+                        context.tries_absolute_path,
+                        context.tries_iterator,
+                        context.try_entries,
+                        context.search_query_buffer.items,
+                    );
+                    if (context.can_create) {
+                        context.selected.* = context.try_entries.items.len;
+                    } else {
+                        context.selected.* = 0;
+                    }
+                }
+            }).on_change,
+        );
 
         try stdout.flush();
 

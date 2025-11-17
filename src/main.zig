@@ -209,9 +209,7 @@ pub fn main() !void {
                         context.try_entries,
                         context.search_query_buffer.items,
                     );
-                    if (context.can_create) {
-                        context.selected.* = context.try_entries.items.len;
-                    } else {
+                    if (context.try_entries.items.len > 0) {
                         context.selected.* = 0;
                     }
                 }
@@ -237,8 +235,6 @@ pub fn main() !void {
                     try stdout.flush();
                     break;
                 } else if (try_entries.items.len > 0) {
-                    try std.fs.makeDirAbsolute(try_name_from_search);
-
                     try Framework.write(Framework.CSI ++ Framework.CSICursorToStart);
                     try Framework.write(Framework.CSI ++ Framework.CSIClearScreen);
                     try Framework.print("cd {s}", .{try_entries.items[selected.*].path});

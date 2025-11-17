@@ -87,8 +87,7 @@ pub fn main() !void {
     std.fs.makeDirAbsolute(
         tries_absolute_path,
     ) catch |err| {
-        if (err == error.PathAlreadyExists) {
-        } else {
+        if (err == error.PathAlreadyExists) {} else {
             return err;
         }
     };

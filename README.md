@@ -27,7 +27,7 @@ Requirements:
 git clone https://github.com/gabrielmfern/shot
 ```
 
-### 2. Install `shot_tui` into `/usr/local/bin`
+### 2. Install `shot-tui` into `/usr/local/bin`
 
 This installs the TUI for shot, but doesn't let you use the `shot` command quite yet.
 
@@ -35,7 +35,7 @@ This installs the TUI for shot, but doesn't let you use the `shot` command quite
 sudo zig build install --prefix /usr/local --release=fast
 ```
 
-If you try to use `shot_tui` directly, it won't change your cwd to the directory you select.
+If you try to use `shot-tui` directly, it won't change your cwd to the directory you select.
 
 ### 3. Configure your shell
 
@@ -45,7 +45,7 @@ If you try to use `shot_tui` directly, it won't change your cwd to the directory
 ```sh
 shot() {
   local cmd
-  cmd="$(/usr/local/bin/shot_tui "$@" 2>/dev/tty)"
+  cmd="$(/usr/local/bin/shot-tui "$@" 2>/dev/tty)"
   eval "$cmd"
 }
 ```
@@ -55,7 +55,7 @@ shot() {
 
 ```fish
 function shot 
-  set -l cmd (/usr/local/bin/shot_tui $argv 2>/dev/tty | string collect)
+  set -l cmd (/usr/local/bin/shot-tui $argv 2>/dev/tty | string collect)
   eval "$cmd"
 end
 ```

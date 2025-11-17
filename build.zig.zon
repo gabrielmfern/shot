@@ -1,7 +1,7 @@
 .{
-    .name = .shot,
+    .name = .shot_tui,
     .version = "0.0.0",
-    .fingerprint = 0xab0788bb2d45b679,
+    .fingerprint = 0xace43b2f333ff742,
     .minimum_zig_version = "0.15.2",
     .dependencies = .{},
     .paths = .{

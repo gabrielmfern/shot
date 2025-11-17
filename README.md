@@ -6,6 +6,16 @@ The only differences between try and shot are that the setup for shot is simpler
 
 Can't guarantee that shot will work on Windows, but it does work on Linux and macOS.
 
+## Usage
+
+```sh
+shot [SEARCH_TERM] [--path PATH]
+```
+
+Just like in try, the default tries directory is `~/src/tries`, but it can be overwritten with the `--path` flag or the `TRY_PATH` environment variable.
+
+Also check out the `--help` flag.
+
 ## Installation
 
 Requirements:
@@ -17,7 +27,7 @@ Requirements:
 git clone https://github.com/gabrielmfern/shot
 ```
 
-### 2. Install shot_tui into /usr/local/bin/shot
+### 2. Install `shot_tui` into `/usr/local/bin`
 
 This installs the TUI for shot, but doesn't let you use the `shot` command quite yet.
 
@@ -35,7 +45,7 @@ If you try to use `shot_tui` directly, it won't change your cwd to the directory
 ```sh
 shot() {
   local cmd
-  cmd="$(/usr/local/bin/shot-tui "$@" 2>/dev/tty)"
+  cmd="$(/usr/local/bin/shot_tui "$@" 2>/dev/tty)"
   eval "$cmd"
 }
 ```
@@ -50,14 +60,3 @@ function shot
 end
 ```
 </details>
-
-## Usage
-
-Just like in try, the default tries directory is `~/src/tries`, but it can be overwritten with the `--path` flag or the `TRY_PATH` environment variable.
-
-Also check out the `--help` flag.
-
-```sh
-shot [SEARCH_TERM] [--path PATH]
-```
-

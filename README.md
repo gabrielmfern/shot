@@ -32,23 +32,23 @@ If you try to use `shot_tui` directly, it won't change your cwd to the directory
 <details>
     <summary>bash | zsh</summary>
 
-    ```sh
-	shot() {
-	  local cmd
-	  cmd="$(/usr/local/bin/shot-tui "$@" 2>/dev/tty)"
-	  eval "$cmd"
-	}
-    ```
+```sh
+shot() {
+  local cmd
+  cmd="$(/usr/local/bin/shot-tui "$@" 2>/dev/tty)"
+  eval "$cmd"
+}
+```
 </details>
 <details>
     <summary>fish</summary>
 
-    ```fish
-    function shot 
-      set -l cmd (/usr/local/bin/shot_tui $argv 2>/dev/tty | string collect)
-      eval "$cmd"
-    end
-    ```
+```fish
+function shot 
+  set -l cmd (/usr/local/bin/shot_tui $argv 2>/dev/tty | string collect)
+  eval "$cmd"
+end
+```
 </details>
 
 ## Usage

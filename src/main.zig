@@ -190,7 +190,6 @@ pub fn main() !void {
             .tries_iterator = &tries_iterator,
             .try_entries = &try_entries,
             .search_query_buffer = search_query_buffer,
-            .can_create = can_create,
             .selected = selected,
         };
         try text_input(

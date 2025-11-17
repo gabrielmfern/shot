@@ -22,7 +22,7 @@ pub const CSIArrowLeft = "D";
 arena: std.heap.ArenaAllocator,
 
 allocator: std.mem.Allocator,
-stdout: *std.io.Writer,
+stderr: *std.io.Writer,
 tty: std.fs.File,
 
 states: std.ArrayList(*anyopaque),
@@ -54,14 +54,14 @@ var self: @This() = undefined;
 /// allocates automatically
 pub fn init(
     allocator: std.mem.Allocator,
-    stdout: *std.io.Writer,
+    stderr: *std.io.Writer,
     tty: std.fs.File,
 ) !void {
     self = .{
         .arena = std.heap.ArenaAllocator.init(allocator),
 
         .allocator = allocator,
-        .stdout = stdout,
+        .stderr = stderr,
         .tty = tty,
 
         .states = try std.ArrayList(*anyopaque).initCapacity(allocator, 0),
@@ -72,22 +72,22 @@ pub fn init(
     };
 }
 
-pub fn use_stdout() *std.io.Writer {
-    return self.stdout;
+pub fn use_stderr() *std.io.Writer {
+    return self.stderr;
 }
 
 pub fn use_allocator() std.mem.Allocator {
     return self.allocator;
 }
 
-/// thin wrapper around stdout.write, for convenience
+/// thin wrapper around stderr.write, for convenience
 pub fn write(bytes: []const u8) !void {
-    _ = try self.stdout.write(bytes);
+    _ = try self.stderr.write(bytes);
 }
 
-/// thin wrapper around stdout.print, for convenience
+/// thin wrapper around stderr.print, for convenience
 pub fn print(comptime fmt: []const u8, args: anytype) !void {
-    try self.stdout.print(fmt, args);
+    try self.stderr.print(fmt, args);
 }
 
 pub fn tick() !void {

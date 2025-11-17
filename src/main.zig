@@ -12,7 +12,10 @@ pub fn main() !void {
 
     const args = try std.process.argsAlloc(allocator);
 
-    var stdout_writer = std.fs.File.stdout().writer(try allocator.alloc(u8, 16384));
+    var stderr_writer = std.fs.File.stderr().writer(try allocator.alloc(u8, 16384));
+    const stderr = &stderr_writer.interface;
+
+    var stdout_writer = std.fs.File.stdout().writer(try allocator.alloc(u8, 256));
     const stdout = &stdout_writer.interface;
 
     var path_flag: ?[:0]u8 = null;
@@ -25,7 +28,7 @@ pub fn main() !void {
         const arg = args[i];
 
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
-            _ = try stdout.write(
+            _ = try stderr.write(
                 \\A zig-written version of try (https://github.com/tobi/try). It's also compatible with try.
                 \\
                 \\Usage:
@@ -45,13 +48,13 @@ pub fn main() !void {
                 \\  TRY_PATH      Default path for try directories
                 \\
             );
-            try stdout.flush();
+            try stderr.flush();
             return;
         }
         if (std.mem.eql(u8, arg, "--path")) {
             if (args.len == i + 1) {
-                _ = try stdout.write("Missing value for --path.");
-                try stdout.flush();
+                _ = try stderr.write("Missing value for --path.");
+                try stderr.flush();
                 return;
             }
             path_flag = args[i + 1];
@@ -122,7 +125,7 @@ pub fn main() !void {
     raw.iflag.ISTRIP = false;
     try std.posix.tcsetattr(tty.handle, .FLUSH, raw);
 
-    try Framework.init(allocator, stdout, tty);
+    try Framework.init(allocator, stderr, tty);
 
     while (true) {
         try Framework.write(Framework.CSI ++ Framework.CSICursorToStart);
@@ -187,7 +190,7 @@ pub fn main() !void {
             }).on_change,
         );
 
-        try stdout.flush();
+        try stderr.flush();
 
         try Framework.tick();
 
@@ -200,15 +203,11 @@ pub fn main() !void {
                     });
                     try std.fs.makeDirAbsolute(path);
 
-                    try Framework.write(Framework.CSI ++ Framework.CSICursorToStart);
-                    try Framework.write(Framework.CSI ++ Framework.CSIClearScreen);
-                    try Framework.print("cd {s}", .{path});
+                    try stdout.print("cd {s}", .{path});
                     try stdout.flush();
                     break;
                 } else if (try_entries.items.len > 0) {
-                    try Framework.write(Framework.CSI ++ Framework.CSICursorToStart);
-                    try Framework.write(Framework.CSI ++ Framework.CSIClearScreen);
-                    try Framework.print("cd {s}", .{try_entries.items[selected.*].path});
+                    try stdout.print("cd {s}", .{try_entries.items[selected.*].path});
                     try stdout.flush();
                     break;
                 }

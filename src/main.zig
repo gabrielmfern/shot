@@ -16,7 +16,6 @@ pub fn main() !void {
     const stdout = &stdout_writer.interface;
 
     var path_flag: ?[:0]u8 = null;
-    var debug_flag = false;
     var search_query_buffer = try std.ArrayList(u8).initCapacity(allocator, 8);
 
     std.debug.assert(args.len >= 1);
@@ -36,7 +35,6 @@ pub fn main() !void {
                 \\Options:
                 \\  --path PATH    Use PATH as the base directory (default: ~/src/tries or $TRY_PATH)
                 \\  --help, -h     Show this help message
-                \\  --debug
                 \\
                 \\Examples:
                 \\  shot                    # Interactive directory selector
@@ -60,28 +58,15 @@ pub fn main() !void {
             i += 1;
             continue;
         }
-        if (std.mem.eql(u8, arg, "--debug")) {
-            debug_flag = true;
-            continue;
-        }
 
         if (search_query_buffer.items.len == 0) {
             try search_query_buffer.appendSlice(allocator, arg);
         }
     }
 
-    std.log.debug("search query: {s}", .{search_query_buffer.items});
-
-    if (debug_flag and path_flag != null) {
-        std.log.debug("--path: {s}", .{path_flag.?});
-    }
-
     const env_map = try std.process.getEnvMap(allocator);
 
     const cwd = try std.process.getCwdAlloc(allocator);
-    if (debug_flag) {
-        std.log.debug("CWD: {s}", .{cwd});
-    }
 
     var tries_absolute_path: []const u8 = try std.fs.path.join(allocator, &.{ cwd, "tries" });
     if (path_flag) |path| {
@@ -91,28 +76,15 @@ pub fn main() !void {
             tries_absolute_path = try std.fs.path.resolve(allocator, &.{ cwd, path });
         }
     } else if (env_map.get("TRY_PATH")) |TRY_PATH| {
-        if (debug_flag) {
-            std.log.debug("TRY_PATH {s}", .{TRY_PATH});
-        }
         tries_absolute_path = TRY_PATH;
     } else if (env_map.get("HOME")) |HOME| {
-        if (debug_flag) {
-            std.log.debug("HOME {s}", .{HOME});
-        }
         tries_absolute_path = try std.fs.path.join(allocator, &.{ HOME, "src/tries" });
-    }
-
-    if (debug_flag) {
-        std.log.debug("final tries absolute path: {s}", .{tries_absolute_path});
     }
 
     std.fs.makeDirAbsolute(
         tries_absolute_path,
     ) catch |err| {
         if (err == error.PathAlreadyExists) {
-            if (debug_flag) {
-                std.log.debug("tries directory exists", .{});
-            }
         } else {
             return err;
         }

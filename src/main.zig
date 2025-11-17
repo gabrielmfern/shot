@@ -5,6 +5,77 @@ const components = @import("components.zig");
 const text_input = components.text_input;
 const list = components.list;
 
+const Args = struct {
+    const Flags = struct {
+        path: ?[]const u8,
+        help: ?void,
+    };
+
+    const Command = enum { search, new, clone };
+
+    command: Command,
+    flags: Flags,
+
+    varying_arguments: []u8,
+
+    fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+        if (self.flags.path) |path| {
+            allocator.free(path);
+        }
+        allocator.free(self.varying_arguments);
+    }
+
+    fn parse(allocator: std.mem.Allocator, args: [][:0]u8) !@This() {
+        var flags = Flags{
+            .path = null,
+            .help = null,
+        };
+
+        var varying_arguments = try std.ArrayList(u8).initCapacity(allocator, 0);
+        errdefer varying_arguments.deinit(allocator);
+
+        var command: Command = .search;
+
+        std.debug.assert(args.len >= 1);
+        var i: usize = 1;
+        while (i < args.len) {
+            defer i += 1;
+            const arg = args[i];
+
+            if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+                flags.help = void{};
+                break;
+            }
+            if (std.mem.eql(u8, arg, "--path")) {
+                if (args.len == i + 1) {
+                    return error.MissingPathValue;
+                }
+                flags.path = args[i + 1];
+                i += 1;
+                continue;
+            }
+
+            if (varying_arguments.items.len == 0) {
+                if (std.mem.eql(u8, arg, "new")) {
+                    command = .new;
+                    continue;
+                } else if (std.mem.eql(u8, arg, "clone")) {
+                    command = .clone;
+                    continue;
+                }
+            }
+
+            try varying_arguments.appendSlice(allocator, arg);
+        }
+
+        return @This(){
+            .command = command,
+            .flags = flags,
+            .varying_arguments = varying_arguments.items,
+        };
+    }
+};
+
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -18,70 +89,71 @@ pub fn main() !void {
     var stdout_writer = std.fs.File.stdout().writer(try allocator.alloc(u8, 256));
     const stdout = &stdout_writer.interface;
 
-    var path_flag: ?[:0]u8 = null;
-    var search_query_buffer = try std.ArrayList(u8).initCapacity(allocator, 8);
-
-    std.debug.assert(args.len >= 1);
-    var i: usize = 1;
-    while (i < args.len) {
-        defer i += 1;
-        const arg = args[i];
-
-        if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
-            _ = try stderr.write(
-                \\A zig-written version of try (https://github.com/tobi/try). It's also compatible with try.
-                \\
-                \\Usage:
-                \\  shot [SEARCH_TERM] [--path PATH]
-                \\  shot --help
-                \\
-                \\Options:
-                \\  --path PATH    Use PATH as the base directory (default: ~/src/tries or $TRY_PATH)
-                \\  --help, -h     Show this help message
-                \\
-                \\Examples:
-                \\  shot                    # Interactive directory selector
-                \\  shot web                # Search for directories containing "web"
-                \\  shot --path ./experiments
-                \\
-                \\Environment Variables:
-                \\  TRY_PATH      Default path for try directories
-                \\
-            );
-            try stderr.flush();
-            return;
-        }
-        if (std.mem.eql(u8, arg, "--path")) {
-            if (args.len == i + 1) {
-                _ = try stderr.write("Missing value for --path.");
+    var parsed_args = Args.parse(allocator, args) catch |err| {
+        switch (err) {
+            error.MissingPathValue => {
+                _ = try stderr.write("Missing value for --path.\n");
                 try stderr.flush();
                 return;
-            }
-            path_flag = args[i + 1];
-            i += 1;
-            continue;
+            },
+            else => {
+                return err;
+            },
         }
+    };
+    defer parsed_args.deinit(allocator);
 
-        if (search_query_buffer.items.len == 0) {
-            try search_query_buffer.appendSlice(allocator, arg);
-        }
+    if (parsed_args.flags.help != null) {
+        _ = try stderr.write(
+            \\A zig-written version of try (https://github.com/tobi/try). It's also compatible with try.
+            \\
+            \\Usage:
+            \\  shot [SEARCH_TERM] [--path PATH]
+            \\  shot --help
+            \\
+            \\Options:
+            \\  --path PATH    Use PATH as the base directory (default: ~/src/tries or $TRY_PATH)
+            \\  --help, -h     Show this help message
+            \\
+            \\Examples:
+            \\  shot                    # Interactive directory selector
+            \\  shot web                # Search for directories containing "web"
+            \\  shot --path ./experiments
+            \\
+            \\Environment Variables:
+            \\  TRY_PATH      Default path for try directories
+            \\
+        );
+        try stderr.flush();
+        return;
     }
+
+    var search_query_buffer = std.ArrayList(u8).initBuffer(parsed_args.varying_arguments);
 
     const env_map = try std.process.getEnvMap(allocator);
 
     const cwd = try std.process.getCwdAlloc(allocator);
 
-    var tries_absolute_path: []const u8 = try std.fs.path.join(allocator, &.{ cwd, "tries" });
-    if (path_flag) |path| {
+    var tries_absolute_path: []const u8 = try std.fs.path.join(
+        allocator,
+        &.{ cwd, "tries" },
+    );
+    if (parsed_args.flags.path) |path| {
         if (std.fs.path.isAbsolute(path)) {
             tries_absolute_path = path;
         } else {
-            tries_absolute_path = try std.fs.path.resolve(allocator, &.{ cwd, path });
+            tries_absolute_path = try std.fs.path.resolve(
+                allocator,
+                &.{ cwd, path },
+            );
         }
     } else if (env_map.get("TRY_PATH")) |TRY_PATH| {
         tries_absolute_path = TRY_PATH;
     } else if (env_map.get("HOME")) |HOME| {
-        tries_absolute_path = try std.fs.path.join(allocator, &.{ HOME, "src/tries" });
+        tries_absolute_path = try std.fs.path.join(
+            allocator,
+            &.{ HOME, "src/tries" },
+        );
     }
 
     std.fs.makeDirAbsolute(

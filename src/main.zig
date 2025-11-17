@@ -138,7 +138,7 @@ pub fn main() !void {
             tries_absolute_path,
         );
 
-        const selected = try Framework.use_state(usize, 1);
+        const selected = try Framework.use_state(usize, 0);
 
         try list(
             selected,

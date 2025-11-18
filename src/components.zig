@@ -54,7 +54,7 @@ pub fn list(
     if (item_count > 0) {
         for (0..item_count) |i| {
             if (selected.* == i) {
-                try Framework.write(Framework.CSI ++ Framework.CSIForeground(228));
+                try Framework.write(Framework.CSI ++ Framework.CSIForeground(33));
                 try Framework.write(Framework.CSI ++ Framework.CSIBold);
             } else {
                 try Framework.write(Framework.CSI ++ Framework.CSIDim);

@@ -183,6 +183,34 @@ pub fn main() !void {
         return;
     }
 
+    if (parsed_args.command == .clone) {
+        var segments_backwards_iterator = std.mem.splitBackwardsScalar(
+            u8,
+            parsed_args.varying_arguments,
+            '/',
+        );
+        const new_try_name = try TryEntry.generate_unique_dir_name(
+            allocator,
+            std.mem.trimEnd(
+                u8,
+                segments_backwards_iterator.first(),
+                ".git",
+            ),
+            tries_absolute_path,
+        );
+        const path = try std.fs.path.join(allocator, &.{
+            tries_absolute_path,
+            new_try_name,
+        });
+
+        try stdout.print(
+            "git clone {s} {s} && cd {s}",
+            .{ parsed_args.varying_arguments, new_try_name, path },
+        );
+        try stdout.flush();
+        return;
+    }
+
     const tries_directory = try std.fs.openDirAbsolute(
         tries_absolute_path,
         .{ .iterate = true, .access_sub_paths = false },

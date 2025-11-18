@@ -131,8 +131,6 @@ pub fn main() !void {
         return;
     }
 
-    var search_query_buffer = std.ArrayList(u8).initBuffer(parsed_args.varying_arguments);
-
     const env_map = try std.process.getEnvMap(allocator);
 
     const cwd = try std.process.getCwdAlloc(allocator);
@@ -167,6 +165,24 @@ pub fn main() !void {
         }
     };
 
+    if (parsed_args.command == .new) {
+        const new_try_name = try TryEntry.generate_unique_dir_name(
+            allocator,
+            parsed_args.varying_arguments,
+            tries_absolute_path,
+        );
+
+        const path = try std.fs.path.join(allocator, &.{
+            tries_absolute_path,
+            new_try_name,
+        });
+        try std.fs.makeDirAbsolute(path);
+
+        try stdout.print("cd {s}", .{path});
+        try stdout.flush();
+        return;
+    }
+
     const tries_directory = try std.fs.openDirAbsolute(
         tries_absolute_path,
         .{ .iterate = true, .access_sub_paths = false },
@@ -178,7 +194,7 @@ pub fn main() !void {
         tries_absolute_path,
         &tries_iterator,
         &try_entries,
-        search_query_buffer.items,
+        parsed_args.varying_arguments,
     );
 
     var tty = try std.fs.cwd().openFile(
@@ -200,6 +216,8 @@ pub fn main() !void {
     try std.posix.tcsetattr(tty.handle, .FLUSH, raw);
 
     try Framework.init(allocator, stderr, tty);
+
+    var search_query_buffer = std.ArrayList(u8).initBuffer(parsed_args.varying_arguments);
 
     while (true) {
         try Framework.write(Framework.CSI ++ Framework.CSICursorToStart);

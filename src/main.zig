@@ -140,6 +140,10 @@ pub fn main() !void {
     }
 
     const env_map = try std.process.getEnvMap(allocator);
+    var key_iterator = env_map.hash_map.keyIterator();
+    while (key_iterator.next()) |key| {
+        std.log.debug("env {s}", .{key.*});
+    }
 
     const cwd = try std.process.getCwdAlloc(allocator);
 
@@ -164,6 +168,7 @@ pub fn main() !void {
             &.{ HOME, "src/tries" },
         );
     }
+    std.log.debug("final tries absolute path {s}", .{tries_absolute_path});
 
     std.fs.makeDirAbsolute(
         tries_absolute_path,

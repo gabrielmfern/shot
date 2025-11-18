@@ -65,6 +65,9 @@ const Args = struct {
                 }
             }
 
+            if (varying_arguments.items.len > 0) {
+                try varying_arguments.append(allocator, ' ');
+            }
             try varying_arguments.appendSlice(allocator, arg);
         }
 

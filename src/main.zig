@@ -189,13 +189,13 @@ pub fn main() !void {
             parsed_args.varying_arguments,
             '/',
         );
+        const last_segment = segments_backwards_iterator.first();
         const new_try_name = try TryEntry.generate_unique_dir_name(
             allocator,
-            std.mem.trimEnd(
-                u8,
-                segments_backwards_iterator.first(),
-                ".git",
-            ),
+            if (last_segment.len >= 4 and std.mem.endsWith(u8, last_segment, ".git"))
+                last_segment[0 .. last_segment.len - 4]
+            else
+                last_segment,
             tries_absolute_path,
         );
         const path = try std.fs.path.join(allocator, &.{
@@ -205,7 +205,7 @@ pub fn main() !void {
 
         try stdout.print(
             "git clone {s} {s} && cd {s}",
-            .{ parsed_args.varying_arguments, new_try_name, path },
+            .{ parsed_args.varying_arguments, path, path },
         );
         try stdout.flush();
         return;

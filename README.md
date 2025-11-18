@@ -2,7 +2,7 @@
 
 This is a rewrite of [try](https://github.com/tobi/try) and is almost completely compatible with try.
 
-The only differences between try and shot are that the setup for shot is simpler, but has to be done manually (for now), and shot is missing `clone` and `new` as commands which I'll probably be adding in a bit.
+The only differences between try and shot are that the setup for shot is simpler, but has to be done manually (for now).
 
 Can't guarantee that shot will work on Windows, but it does work on Linux and macOS.
 
@@ -10,9 +10,20 @@ Can't guarantee that shot will work on Windows, but it does work on Linux and ma
 
 ```sh
 shot [SEARCH_TERM] [--path PATH]
+shot new NAME [--path PATH]
+shot clone GIT_URL [--path PATH]
 ```
 
 Just like in try, the default tries directory is `~/src/tries`, but it can be overwritten with the `--path` flag or the `TRY_PATH` environment variable.
+
+**Commands:**
+- `shot` or `shot [SEARCH_TERM]` - Interactive directory selector with optional search, and try creation
+- `shot new NAME` - Create a new empty try directory
+- `shot clone GIT_URL` - Clone a git repository into a new try directory
+
+All try names are determined by: 
+1. Prefixing the current date to the given try name
+2. Incrementing to the number of tries with the given name
 
 Also check out the `--help` flag.
 

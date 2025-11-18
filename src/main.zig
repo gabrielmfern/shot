@@ -112,16 +112,24 @@ pub fn main() !void {
             \\
             \\Usage:
             \\  shot [SEARCH_TERM] [--path PATH]
+            \\  shot new NAME [--path PATH]
+            \\  shot clone  [--path PATH]
             \\  shot --help
+            \\
+            \\Commands:
+            \\  new NAME       Create a new directory with date-prefixed name
+            \\  clone GIT_URL  Clone a git repository into a date-prefixed directory
             \\
             \\Options:
             \\  --path PATH    Use PATH as the base directory (default: ~/src/tries or $TRY_PATH)
             \\  --help, -h     Show this help message
             \\
             \\Examples:
-            \\  shot                    # Interactive directory selector
-            \\  shot web                # Search for directories containing "web"
+            \\  shot                                        # Interactive directory selector
+            \\  shot web                                    # Search for directories containing "web"
             \\  shot --path ./experiments
+            \\  shot new my-project                         # Create a new try directory with the name "my-project"
+            \\  shot clone https://github.com/user/repo.git # Clone a git repository into a new try directory
             \\
             \\Environment Variables:
             \\  TRY_PATH      Default path for try directories

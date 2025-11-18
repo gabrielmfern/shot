@@ -170,13 +170,15 @@ pub fn main() !void {
     }
     std.log.debug("final tries absolute path {s}", .{tries_absolute_path});
 
-    std.fs.makeDirAbsolute(
-        tries_absolute_path,
-    ) catch |err| {
-        if (err == error.PathAlreadyExists) {} else {
-            return err;
-        }
-    };
+    var component_iterator = try std.fs.path.componentIterator(tries_absolute_path);
+    while (component_iterator.next()) |component| {
+        std.log.debug("ensuring that the component of the tries absolute path exists {s}", .{component.path});
+        std.fs.makeDirAbsolute(component.path) catch |err| {
+            if (err == error.PathAlreadyExists) {} else {
+                return err;
+            }
+        };
+    }
 
     if (parsed_args.command == .new) {
         const new_try_name = try TryEntry.generate_unique_dir_name(

@@ -9,6 +9,7 @@ const Args = struct {
     const Flags = struct {
         path: ?[]const u8,
         help: ?void,
+        pipe: ?void,
     };
 
     const Command = enum { search, new, clone };
@@ -29,6 +30,7 @@ const Args = struct {
         var flags = Flags{
             .path = null,
             .help = null,
+            .pipe = null,
         };
 
         var varying_arguments = try std.ArrayList(u8).initCapacity(allocator, 0);
@@ -44,6 +46,10 @@ const Args = struct {
 
             if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
                 flags.help = void{};
+                break;
+            }
+            if (std.mem.eql(u8, arg, "--pipe") or std.mem.eql(u8, arg, "-p")) {
+                flags.pipe = void{};
                 break;
             }
             if (std.mem.eql(u8, arg, "--path")) {
@@ -114,6 +120,7 @@ pub fn main() !void {
             \\  shot [SEARCH_TERM] [--path PATH]
             \\  shot new NAME [--path PATH]
             \\  shot clone  [--path PATH]
+            \\  shot new integration --pipe | npx create-next-app@latest
             \\  shot --help
             \\
             \\Commands:
@@ -123,6 +130,7 @@ pub fn main() !void {
             \\Options:
             \\  --path PATH    Use PATH as the base directory (default: ~/src/tries or $TRY_PATH)
             \\  --help, -h     Show this help message
+            \\  --pipe, -p     Returns the selected path instead of navigating to it
             \\
             \\Examples:
             \\  shot                                        # Interactive directory selector
@@ -193,12 +201,23 @@ pub fn main() !void {
         });
         try std.fs.makeDirAbsolute(path);
 
-        try stdout.print("cd {s}", .{path});
-        try stdout.flush();
+        if (parsed_args.flags.pipe != null) {
+            _ = try stdout.write(path);
+            try stdout.flush();
+        } else {
+            try stdout.print("cd {s}", .{path});
+            try stdout.flush();
+        }
         return;
     }
 
     if (parsed_args.command == .clone) {
+        if (parsed_args.flags.pipe != null) {
+            _ = try stderr.write("Can't clone with the --pipe option enabled");
+            try stderr.flush();
+            return;
+        }
+
         var segments_backwards_iterator = std.mem.splitBackwardsScalar(
             u8,
             parsed_args.varying_arguments,
@@ -336,13 +355,24 @@ pub fn main() !void {
                         tries_absolute_path,
                         try_name_from_search,
                     });
+                    if (parsed_args.flags.pipe != null) {
+                        _ = try stdout.write(path);
+                        try stdout.flush();
+                        break;
+                    }
                     try std.fs.makeDirAbsolute(path);
 
                     try stdout.print("cd {s}", .{path});
                     try stdout.flush();
                     break;
                 } else if (try_entries.items.len > 0) {
-                    try stdout.print("cd {s}", .{try_entries.items[selected.*].path});
+                    const path = try_entries.items[selected.*].path;
+                    if (parsed_args.flags.pipe != null) {
+                        _ = try stdout.write(path);
+                        try stdout.flush();
+                        break;
+                    }
+                    try stdout.print("cd {s}", .{path});
                     try stdout.flush();
                     break;
                 }

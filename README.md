@@ -12,7 +12,7 @@ Can't guarantee that shot will work on Windows, but it does work on Linux and ma
 shot [SEARCH_TERM] [--path PATH]
 shot new NAME [--path PATH]
 shot clone GIT_URL [--path PATH]
-shot new integration --pipe | npx create-next-app@latest
+npx create-next-app@latest $(shot new integration --pipe)
 ```
 
 Just like in try, the default tries directory is `~/src/tries`, but it can be overwritten with the `--path` flag or the `TRY_PATH` environment variable.

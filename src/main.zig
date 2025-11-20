@@ -120,7 +120,7 @@ pub fn main() !void {
             \\  shot [SEARCH_TERM] [--path PATH]
             \\  shot new NAME [--path PATH]
             \\  shot clone  [--path PATH]
-            \\  shot new integration --pipe | npx create-next-app@latest
+            \\  npx create-next-app@latest $(shot new test-app)
             \\  shot --help
             \\
             \\Commands:
@@ -199,15 +199,16 @@ pub fn main() !void {
             tries_absolute_path,
             new_try_name,
         });
-        try std.fs.makeDirAbsolute(path);
 
         if (parsed_args.flags.pipe != null) {
-            _ = try stdout.write(path);
+            _ = try stdout.print("echo {s}", .{path});
             try stdout.flush();
         } else {
+            try std.fs.makeDirAbsolute(path);
             try stdout.print("cd {s}", .{path});
             try stdout.flush();
         }
+
         return;
     }
 
@@ -356,7 +357,7 @@ pub fn main() !void {
                         try_name_from_search,
                     });
                     if (parsed_args.flags.pipe != null) {
-                        _ = try stdout.write(path);
+                        _ = try stdout.print("echo {s}", .{path});
                         try stdout.flush();
                         break;
                     }
@@ -368,7 +369,7 @@ pub fn main() !void {
                 } else if (try_entries.items.len > 0) {
                     const path = try_entries.items[selected.*].path;
                     if (parsed_args.flags.pipe != null) {
-                        _ = try stdout.write(path);
+                        _ = try stdout.print("echo {s}", .{path});
                         try stdout.flush();
                         break;
                     }

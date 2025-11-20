@@ -280,7 +280,9 @@ pub fn main() !void {
 
     try Framework.init(allocator, stderr, tty);
 
-    var search_query_buffer = std.ArrayList(u8).initBuffer(parsed_args.varying_arguments);
+    var search_query_buffer = std.ArrayList(u8).fromOwnedSlice(
+        parsed_args.varying_arguments,
+    );
 
     while (true) {
         try Framework.write(Framework.CSI ++ Framework.CSICursorToStart);

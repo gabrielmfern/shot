@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Framework = @import("framework.zig");
 const components = @import("components.zig");
+const time_since = components.time_since;
 const text_input = components.text_input;
 const list = components.list;
 
@@ -309,48 +310,16 @@ pub fn main() !void {
                     const entries, const new_entry_name = context;
                     if (index < entries.len) {
                         const entry: TryEntry = entries[index];
-                        try Framework.print("  > {s} ", .{entry.name});
+                        try Framework.print("  > {d} {s}", .{ entry.score, entry.name });
 
                         try Framework.write(Framework.CSI ++ Framework.CSIDim);
-                        try Framework.write("(accessed ");
-                        switch (entry.creation_date.time_to(entry.last_access_timestamp)) {
-                            .moments => {
-                                try Framework.write("moments ago");
-                            },
-                            .minutes => |minutes| {
-                                if (minutes > 1) {
-                                    try Framework.print("{d} minutes ago", .{minutes});
-                                } else {
-                                    try Framework.write("a minute ago");
-                                }
-                            },
-                            .hours => |hours| {
-                                if (hours > 1) {
-                                    try Framework.print("{d} hours ago", .{hours});
-                                } else {
-                                    try Framework.write("an hour ago");
-                                }
-                            },
-                            .days => |days| {
-                                if (days > 1) {
-                                    try Framework.print("{d} days ago", .{days});
-                                } else {
-                                    try Framework.write("a day ago");
-                                }
-                            },
-                            .months => |months| {
-                                if (months > 1) {
-                                    try Framework.print("{d} months ago", .{months});
-                                } else {
-                                    try Framework.write("a month ago");
-                                }
-                            },
-                        }
+                        try Framework.write(" (accessed ");
+                        try time_since(entry.last_access_timestamp);
                         try Framework.write(")");
-                        try Framework.write(Framework.CSI ++ Framework.CSIGraphicReset);
+                        try Framework.write(Framework.CSI ++ Framework.CSIDimAndBoldReset);
                         try Framework.write("\n");
                     } else {
-                        try Framework.print("  Create {s}\n", .{new_entry_name});
+                        try Framework.print("  + {s}\n", .{new_entry_name});
                     }
                 }
             }).render_entry,
@@ -372,13 +341,12 @@ pub fn main() !void {
                     context: @TypeOf(search_changed_context),
                     value: *std.ArrayList(u8),
                 ) anyerror!void {
-                    _ = value;
                     try get_entries(
                         Framework.use_allocator(),
                         context.tries_absolute_path,
                         context.tries_iterator,
                         context.try_entries,
-                        context.search_query_buffer.items,
+                        value.items,
                     );
                     if (context.try_entries.items.len > 0) {
                         context.selected.* = 0;
@@ -532,7 +500,7 @@ const TryEntry = struct {
     }
 };
 
-const Date = struct {
+pub const Date = struct {
     year: u16,
     month: u8,
     date: u8,
@@ -559,44 +527,6 @@ const Date = struct {
         days += @as(u32, self.date - 1);
 
         return @as(i64, days) * std.time.s_per_day;
-    }
-
-    const Time = union(enum) { months: i64, days: i64, hours: i64, minutes: i64, moments };
-
-    fn time_to(self: @This(), now_timestamp: i64) Time {
-        const difference = now_timestamp - self.get_timestamp();
-        const difference_months = @divTrunc(difference, std.time.s_per_day * 30);
-
-        if (difference_months != 0) {
-            return Time{
-                .months = difference_months,
-            };
-        }
-        const difference_days = @divTrunc(difference, std.time.s_per_day);
-
-        if (difference_days != 0) {
-            return Time{
-                .days = difference_days,
-            };
-        }
-
-        const difference_hours = @divTrunc(difference, std.time.s_per_hour);
-
-        if (difference_hours != 0) {
-            return Time{
-                .hours = difference_hours,
-            };
-        }
-
-        const difference_minutes = @divTrunc(difference, std.time.s_per_min);
-
-        if (difference_minutes != 0) {
-            return Time{
-                .minutes = difference_minutes,
-            };
-        }
-
-        return Time.moments;
     }
 
     fn to_american_format(self: @This(), allocator: std.mem.Allocator) ![]u8 {
@@ -691,12 +621,12 @@ test "calculate_try_score" {
     {
         const score1 = calculate_try_score(
             "2024-01-01-stuff",
-            "stuff",
+            "",
             std.time.timestamp() - (2 * std.time.s_per_hour),
         );
         const score2 = calculate_try_score(
             "2024-01-01-stuff-2",
-            "2",
+            "",
             std.time.timestamp() - (2 * std.time.s_per_hour),
         );
         try std.testing.expect(score1 == score2);

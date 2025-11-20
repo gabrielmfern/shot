@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Date = @import("main.zig").Date;
 const Framework = @import("framework.zig");
 
 pub fn text_input(
@@ -62,5 +63,82 @@ pub fn list(
             try render_item(i, render_context);
             try Framework.write(Framework.CSI ++ Framework.CSIGraphicReset);
         }
+    }
+}
+
+pub const Time = union(enum) {
+    months: i64,
+    days: i64,
+    hours: i64,
+    minutes: i64,
+    moments,
+
+    fn calculate(timestamp: i64) @This() {
+        const difference_months = @divTrunc(timestamp, std.time.s_per_day * 30);
+        if (difference_months != 0) {
+            return Time{
+                .months = difference_months,
+            };
+        }
+
+        const difference_days = @divTrunc(timestamp, std.time.s_per_day);
+        if (difference_days != 0) {
+            return Time{
+                .days = difference_days,
+            };
+        }
+
+        const difference_hours = @divTrunc(timestamp, std.time.s_per_hour);
+        if (difference_hours != 0) {
+            return Time{
+                .hours = difference_hours,
+            };
+        }
+
+        const difference_minutes = @divTrunc(timestamp, std.time.s_per_min);
+        if (difference_minutes != 0) {
+            return Time{
+                .minutes = difference_minutes,
+            };
+        }
+
+        return Time.moments;
+    }
+};
+
+pub fn time_since(since: i64) !void {
+    const now = std.time.timestamp();
+    switch (Time.calculate(now - since)) {
+        .moments => {
+            try Framework.write("moments ago");
+        },
+        .minutes => |minutes| {
+            if (minutes > 1) {
+                try Framework.print("{d} minutes ago", .{minutes});
+            } else {
+                try Framework.write("a minute ago");
+            }
+        },
+        .hours => |hours| {
+            if (hours > 1) {
+                try Framework.print("{d} hours ago", .{hours});
+            } else {
+                try Framework.write("an hour ago");
+            }
+        },
+        .days => |days| {
+            if (days > 1) {
+                try Framework.print("{d} days ago", .{days});
+            } else {
+                try Framework.write("a day ago");
+            }
+        },
+        .months => |months| {
+            if (months > 1) {
+                try Framework.print("{d} months ago", .{months});
+            } else {
+                try Framework.write("a month ago");
+            }
+        },
     }
 }

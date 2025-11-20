@@ -308,7 +308,47 @@ pub fn main() !void {
                 ) anyerror!void {
                     const entries, const new_entry_name = context;
                     if (index < entries.len) {
-                        try Framework.print("  > {s}\n", .{entries[index].name});
+                        const entry: TryEntry = entries[index];
+                        try Framework.print("  > {s} ", .{entry.name});
+
+                        try Framework.write(Framework.CSI ++ Framework.CSIDim);
+                        try Framework.write("(accessed ");
+                        switch (entry.creation_date.time_to(entry.last_access_timestamp)) {
+                            .moments => {
+                                try Framework.write("moments ago");
+                            },
+                            .minutes => |minutes| {
+                                if (minutes > 1) {
+                                    try Framework.print("{d} minutes ago", .{minutes});
+                                } else {
+                                    try Framework.write("a minute ago");
+                                }
+                            },
+                            .hours => |hours| {
+                                if (hours > 1) {
+                                    try Framework.print("{d} hours ago", .{hours});
+                                } else {
+                                    try Framework.write("an hour ago");
+                                }
+                            },
+                            .days => |days| {
+                                if (days > 1) {
+                                    try Framework.print("{d} days ago", .{days});
+                                } else {
+                                    try Framework.write("a day ago");
+                                }
+                            },
+                            .months => |months| {
+                                if (months > 1) {
+                                    try Framework.print("{d} months ago", .{months});
+                                } else {
+                                    try Framework.write("a month ago");
+                                }
+                            },
+                        }
+                        try Framework.write(")");
+                        try Framework.write(Framework.CSI ++ Framework.CSIGraphicReset);
+                        try Framework.write("\n");
                     } else {
                         try Framework.print("  Create {s}\n", .{new_entry_name});
                     }
@@ -401,16 +441,18 @@ fn get_entries(
             );
             const dir = try std.fs.openDirAbsolute(path, .{});
             const stat = try dir.stat();
+            const last_access_timestamp: i64 = @intCast(@divTrunc(stat.atime, std.time.ns_per_s));
 
             const creation_date = try Date.from_american_format(entry.name);
             try try_entries.append(allocator, .{
                 .name = entry.name,
                 .path = path,
                 .creation_date = creation_date,
+                .last_access_timestamp = last_access_timestamp,
                 .score = calculate_try_score(
                     entry.name,
                     search_query,
-                    @intCast(@divTrunc(stat.atime, std.time.ns_per_s)),
+                    last_access_timestamp,
                 ),
             });
         }
@@ -422,7 +464,7 @@ fn get_entries(
         void{},
         (struct {
             fn lessThan(_: void, a: TryEntry, b: TryEntry) bool {
-                return a.score < b.score;
+                return a.score > b.score;
             }
         }).lessThan,
     );
@@ -432,6 +474,7 @@ const TryEntry = struct {
     name: []const u8,
     path: []const u8,
     creation_date: Date,
+    last_access_timestamp: i64,
     score: f64,
 
     fn generate_unique_dir_name(
@@ -516,6 +559,44 @@ const Date = struct {
         days += @as(u32, self.date - 1);
 
         return @as(i64, days) * std.time.s_per_day;
+    }
+
+    const Time = union(enum) { months: i64, days: i64, hours: i64, minutes: i64, moments };
+
+    fn time_to(self: @This(), now_timestamp: i64) Time {
+        const difference = now_timestamp - self.get_timestamp();
+        const difference_months = @divTrunc(difference, std.time.s_per_day * 30);
+
+        if (difference_months != 0) {
+            return Time{
+                .months = difference_months,
+            };
+        }
+        const difference_days = @divTrunc(difference, std.time.s_per_day);
+
+        if (difference_days != 0) {
+            return Time{
+                .days = difference_days,
+            };
+        }
+
+        const difference_hours = @divTrunc(difference, std.time.s_per_hour);
+
+        if (difference_hours != 0) {
+            return Time{
+                .hours = difference_hours,
+            };
+        }
+
+        const difference_minutes = @divTrunc(difference, std.time.s_per_min);
+
+        if (difference_minutes != 0) {
+            return Time{
+                .minutes = difference_minutes,
+            };
+        }
+
+        return Time.moments;
     }
 
     fn to_american_format(self: @This(), allocator: std.mem.Allocator) ![]u8 {
@@ -607,29 +688,33 @@ fn calculate_try_score(try_name: []const u8, query: []const u8, last_access_time
 }
 
 test "calculate_try_score" {
-    const score1 = calculate_try_score(
-        "2024-01-01-stuff",
-        "stuff",
-        std.time.timestamp() - (2 * std.time.s_per_hour),
-    );
-    const score2 = calculate_try_score(
-        "2024-01-01-stuff-2",
-        "2",
-        std.time.timestamp() - (2 * std.time.s_per_hour),
-    );
-    try std.testing.expect(score1 == score2);
+    {
+        const score1 = calculate_try_score(
+            "2024-01-01-stuff",
+            "stuff",
+            std.time.timestamp() - (2 * std.time.s_per_hour),
+        );
+        const score2 = calculate_try_score(
+            "2024-01-01-stuff-2",
+            "2",
+            std.time.timestamp() - (2 * std.time.s_per_hour),
+        );
+        try std.testing.expect(score1 == score2);
+    }
 
-    const score3 = calculate_try_score(
-        "2024-01-01-try",
-        "",
-        std.time.timestamp() - (10 * std.time.s_per_hour),
-    );
-    const score4 = calculate_try_score(
-        "2024-01-01-try-2",
-        "",
-        std.time.timestamp() - (2 * std.time.s_per_hour),
-    );
-    try std.testing.expect(score4 > score3);
+    {
+        const score1 = calculate_try_score(
+            "2024-01-01-try",
+            "",
+            std.time.timestamp() - (10 * std.time.s_per_hour),
+        );
+        const score2 = calculate_try_score(
+            "2024-01-01-try-2",
+            "",
+            std.time.timestamp() - (2 * std.time.s_per_hour),
+        );
+        try std.testing.expect(score2 > score1);
+    }
 }
 
 fn searching_score(text: []const u8, query: []const u8) f64 {

@@ -23,8 +23,8 @@ Just like in try, the default tries directory is `~/src/tries`, but it can be ov
 - `shot clone GIT_URL` - Clone a git repository into a new try directory
 
 All try names are determined by: 
-1. Prefixing the current date to the given try name
-2. Incrementing to the number of tries with the given name
+1. Prefixing the current date with the format `yyyy-mm-dd` to the given try name
+2. Adding the count of tries done as the suffix
 
 Also check out the `--help` flag.
 

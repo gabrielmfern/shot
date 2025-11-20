@@ -411,7 +411,7 @@ fn get_entries(
             const stat = try dir.stat();
             const last_access_timestamp: i64 = @intCast(@divTrunc(stat.atime, std.time.ns_per_s));
 
-            const creation_date = try Date.from_american_format(entry.name);
+            const creation_date = try Date.from_descending_format(entry.name);
             try try_entries.append(allocator, .{
                 .name = entry.name,
                 .path = path,
@@ -455,7 +455,7 @@ const TryEntry = struct {
             allocator,
             u8,
             &.{
-                try date.to_american_format(allocator),
+                try date.to_descending_format(allocator),
                 "-",
                 name,
             },
@@ -529,18 +529,18 @@ pub const Date = struct {
         return @as(i64, days) * std.time.s_per_day;
     }
 
-    fn to_american_format(self: @This(), allocator: std.mem.Allocator) ![]u8 {
+    fn to_descending_format(self: @This(), allocator: std.mem.Allocator) ![]u8 {
         return try std.fmt.allocPrint(
             allocator,
-            "{0:02}-{1:02}-{2:04}",
-            .{ self.month, self.date, self.year },
+            "{0:04}-{1:02}-{2:02}",
+            .{ self.year, self.month, self.date },
         );
     }
 
-    fn from_american_format(text: []const u8) !@This() {
-        const month = text[0.."mm".len];
-        const date = text["mm-".len.."mm-dd".len];
-        const year = text["mm-dd-".len.."mm-dd-YYYY".len];
+    fn from_descending_format(text: []const u8) !@This() {
+        const year = text[0.."YYYY".len];
+        const month = text["YYYY-".len.."YYYY-mm".len];
+        const date = text["YYYY-mm-".len.."YYYY-mm-dd".len];
 
         return .{
             .year = try std.fmt.parseInt(u16, year, 10),

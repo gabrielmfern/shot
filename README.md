@@ -1,5 +1,9 @@
 # shot
 
+<p align="center">
+    <video src="./demo.mp4" />
+</p>
+
 This is a rewrite of [try](https://github.com/tobi/try) and is almost completely compatible with try.
 
 The only differences between try and shot are that the setup for shot is simpler, but has to be done manually (for now).

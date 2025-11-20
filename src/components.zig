@@ -56,12 +56,22 @@ pub fn list(
         for (0..item_count) |i| {
             if (selected.* == i) {
                 try Framework.write(Framework.CSI ++ Framework.CSIForeground(33));
+                try Framework.write(Framework.CSI ++ Framework.CSIBackground(240));
                 try Framework.write(Framework.CSI ++ Framework.CSIBold);
             } else {
-                try Framework.write(Framework.CSI ++ Framework.CSIDim);
+                try Framework.write(Framework.CSI ++ Framework.CSIForeground(240));
+            }
+            try Framework.write("▌ ");
+            try Framework.write(Framework.CSI ++ Framework.CSIGraphicReset);
+
+            if (selected.* == i) {
+                try Framework.write(Framework.CSI ++ Framework.CSIBackground(240));
             }
             try render_item(i, render_context);
+            try Framework.write(" ");
             try Framework.write(Framework.CSI ++ Framework.CSIGraphicReset);
+
+            try Framework.write("\n");
         }
     }
 }

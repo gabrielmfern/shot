@@ -310,22 +310,22 @@ pub fn main() !void {
                     const entries, const new_entry_name = context;
                     if (index < entries.len) {
                         const entry: TryEntry = entries[index];
-                        try Framework.print("  > {s}", .{ entry.name });
+                        try Framework.print("{s}", .{ entry.name });
 
                         try Framework.write(Framework.CSI ++ Framework.CSIDim);
                         try Framework.write(" (accessed ");
                         try time_since(entry.last_access_timestamp);
                         try Framework.write(")");
                         try Framework.write(Framework.CSI ++ Framework.CSIDimAndBoldReset);
-                        try Framework.write("\n");
                     } else {
-                        try Framework.print("  + {s}\n", .{new_entry_name});
+                        try Framework.print("Create {s}", .{new_entry_name});
                     }
                 }
             }).render_entry,
         );
 
-        try Framework.write("─────────────────────────────────────────────\n");
+        try Framework.write(" " ++ "─" ** 40 ++ "\n");
+
         const search_changed_context = .{
             .tries_absolute_path = tries_absolute_path,
             .tries_iterator = &tries_iterator,

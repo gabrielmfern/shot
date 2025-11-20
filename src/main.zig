@@ -310,7 +310,7 @@ pub fn main() !void {
                     const entries, const new_entry_name = context;
                     if (index < entries.len) {
                         const entry: TryEntry = entries[index];
-                        try Framework.print("  > {d} {s}", .{ entry.score, entry.name });
+                        try Framework.print("  > {s}", .{ entry.name });
 
                         try Framework.write(Framework.CSI ++ Framework.CSIDim);
                         try Framework.write(" (accessed ");

@@ -417,7 +417,7 @@ fn get_entries(
 
             const creation_date = try Date.from_descending_format(entry.name);
             try try_entries.append(allocator, .{
-                .name = entry.name,
+                .name = try allocator.dupe(u8, entry.name),
                 .path = path,
                 .creation_date = creation_date,
                 .last_access_timestamp = last_access_timestamp,

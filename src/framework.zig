@@ -3,6 +3,15 @@ const std = @import("std");
 pub const CSI = "\x1b[";
 pub const CSIClearScreen = "2J";
 pub const CSICursorToStart = "H";
+pub const SaveCursorPosition = "\x1b 7";
+pub const RestoreSavedCursorPosition = "\x1b 8";
+pub const CSIRequestCursorPosition = "6n";
+pub inline fn CSIMoveCursorTo(
+    comptime row: usize,
+    comptime column: usize,
+) *const [std.fmt.count("{d};{d}H", .{ row, column })]u8 {
+    return std.fmt.comptimePrint("{d};{d}H", .{ row, column });
+}
 pub const CSIDim = "2m";
 pub const CSIBold = "1m";
 pub const CSIDimAndBoldReset = "22m";
@@ -70,6 +79,39 @@ pub fn init(
         .tick_input_handlers = try std.ArrayList(InputHandler).initCapacity(allocator, 0),
         .last_input = null,
     };
+}
+
+pub fn get_terminal_size() !struct { width: usize, height: usize } {
+    try write(SaveCursorPosition);
+    try write(CSI ++ CSIMoveCursorTo(100_000, 100_000));
+    try write(CSI ++ CSIRequestCursorPosition);
+    try self.stderr.flush();
+
+    var buffer: [(CSI ++ "l00000;l00000R").len]u8 = undefined;
+    const bytes_read = try self.tty.read(&buffer);
+    const input = buffer[0..bytes_read];
+
+    try write(RestoreSavedCursorPosition);
+    try self.stderr.flush();
+
+    if (std.mem.indexOf(
+        u8,
+        input,
+        ";",
+    )) |semicolon_index| {
+        const column_string = input[2..semicolon_index];
+        const row_string = input[semicolon_index + 1 .. bytes_read - 1];
+
+        const height = try std.fmt.parseInt(usize, column_string, 10);
+        const width = try std.fmt.parseInt(usize, row_string, 10);
+
+        return .{
+            .width = width,
+            .height = height,
+        };
+    } else {
+        return error.CouldNotDetermineTerminalSize;
+    }
 }
 
 pub fn use_stderr() *std.io.Writer {

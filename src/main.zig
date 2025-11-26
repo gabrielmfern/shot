@@ -467,7 +467,7 @@ const TryEntry = struct {
             date_prefixed_name = try std.mem.concat(
                 allocator,
                 u8,
-                &.{ try date.to_descending_format(allocator), "-unnmaed" },
+                &.{ try date.to_descending_format(allocator), "-unnamed" },
             );
         }
 

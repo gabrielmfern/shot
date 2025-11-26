@@ -455,15 +455,21 @@ const TryEntry = struct {
         base_path: []const u8,
     ) ![]const u8 {
         const date = Date.from_timestamp(std.time.timestamp());
-        const date_prefixed_name = try std.mem.concat(
-            allocator,
-            u8,
-            &.{
+        const trimmed_name = std.mem.trim(u8, name, " ");
+        var date_prefixed_name: []u8 = undefined;
+        if (trimmed_name.len > 0) {
+            date_prefixed_name = try std.mem.concat(allocator, u8, &.{
                 try date.to_descending_format(allocator),
                 "-",
                 name,
-            },
-        );
+            });
+        } else {
+            date_prefixed_name = try std.mem.concat(
+                allocator,
+                u8,
+                &.{ try date.to_descending_format(allocator), "-unnmaed" },
+            );
+        }
 
         const date_prefixed_path = try std.fs.path.join(
             allocator,

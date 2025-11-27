@@ -3,8 +3,8 @@ const std = @import("std");
 pub const CSI = "\x1b[";
 pub const CSIClearScreen = "2J";
 pub const CSICursorToStart = "H";
-pub const SaveCursorPosition = "\x1b 7";
-pub const RestoreSavedCursorPosition = "\x1b 8";
+pub const SaveCursorPosition = "\x1b7";
+pub const RestoreSavedCursorPosition = "\x1b8";
 pub const CSIRequestCursorPosition = "6n";
 pub inline fn CSIMoveCursorTo(
     comptime row: usize,
@@ -83,11 +83,12 @@ pub fn init(
 
 pub fn get_terminal_size() !struct { width: usize, height: usize } {
     try write(SaveCursorPosition);
-    try write(CSI ++ CSIMoveCursorTo(100_000, 100_000));
+    try self.stderr.flush();
+    try write(CSI ++ CSIMoveCursorTo(10_000, 10_000));
     try write(CSI ++ CSIRequestCursorPosition);
     try self.stderr.flush();
 
-    var buffer: [(CSI ++ "l00000;l00000R").len]u8 = undefined;
+    var buffer: [(CSI ++ "10000;10000R").len]u8 = undefined;
     const bytes_read = try self.tty.read(&buffer);
     const input = buffer[0..bytes_read];
 

@@ -133,6 +133,10 @@ pub fn print(comptime fmt: []const u8, args: anytype) !void {
     try self.stderr.print(fmt, args);
 }
 
+pub fn flush() !void {
+    try self.stderr.flush();
+}
+
 pub fn tick() !void {
     if (self.state_cursor_index < self.states.items.len) {
         // yes, this is the same as React

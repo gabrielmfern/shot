@@ -296,37 +296,38 @@ pub fn main() !void {
             tries_absolute_path,
         );
 
+        const terminal_size = try Framework.get_terminal_size();
+
         const selected = try Framework.use_state(usize, 0);
 
-        try list(
-            selected,
-            if (can_create) try_entries.items.len + 1 else try_entries.items.len,
-            .{ try_entries.items, try_name_from_search },
-            (struct {
+        try list(.{
+            .selected = selected,
+            .item_count = if (can_create) try_entries.items.len + 1 else try_entries.items.len,
+            .starting_row = terminal_size.height - 2,
+            .render_item_context = .{ try_entries.items, try_name_from_search },
+            .render_item = (struct {
                 fn render_entry(
                     index: usize,
                     context: std.meta.Tuple(&.{ []TryEntry, []const u8 }),
                 ) anyerror!void {
                     const entries, const new_entry_name = context;
-                    if (index < entries.len) {
-                        const entry: TryEntry = entries[index];
+                    if (index == 0) {
+                        try Framework.print("Create {s}", .{new_entry_name});
+                    } else {
+                        const entry: TryEntry = entries[index - 1];
                         try Framework.write(Framework.CSI ++ Framework.CSIDim);
                         try Framework.write(entry.name[0.."YYYY-mm-dd-".len]);
                         try Framework.write(Framework.CSI ++ Framework.CSIDimAndBoldReset);
-
                         try Framework.write(entry.name["YYYY-mm-dd-".len..]);
-
                         try Framework.write(Framework.CSI ++ Framework.CSIDim);
                         try Framework.write(" (accessed ");
                         try time_since(entry.last_access_timestamp);
                         try Framework.write(")");
                         try Framework.write(Framework.CSI ++ Framework.CSIDimAndBoldReset);
-                    } else {
-                        try Framework.print("Create {s}", .{new_entry_name});
                     }
                 }
             }).render_entry,
-        );
+        });
 
         try Framework.write(" " ++ "─" ** 40 ++ "\n");
 

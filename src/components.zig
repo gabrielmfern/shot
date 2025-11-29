@@ -30,34 +30,48 @@ pub fn text_input(
     try Framework.print(" > {s}", .{value.items});
 }
 
-pub fn list(
-    selected: *usize,
-    item_count: usize,
-    render_context: anytype,
-    render_item: fn (
+pub fn list(props: anytype) !void {
+    const selected: *usize = props.selected;
+    const item_count: usize = props.item_count;
+    const starting_row: usize = props.starting_row;
+
+    const render_item_context = props.render_item_context;
+    const render_item: fn (
         item_index: usize,
-        context: @TypeOf(render_context),
-    ) anyerror!void,
-) !void {
+        context: @TypeOf(render_item_context),
+    ) anyerror!void = props.render_item;
+
     const input_context = .{ .selected = selected, .item_count = item_count };
     try Framework.use_input_handler(input_context, (struct {
         fn handle(context: *@TypeOf(input_context), input: Framework.Input) anyerror!void {
             if (input == .action) {
                 if (input.action == .ArrowDown) {
-                    context.selected.* = (context.selected.* + 1) % context.item_count;
-                } else if (input.action == .ArrowUp) {
                     context.selected.* = if (context.selected.* == 0) context.item_count - 1 else context.selected.* - 1;
+                } else if (input.action == .ArrowUp) {
+                    context.selected.* = (context.selected.* + 1) % context.item_count;
                 }
             }
         }
     }).handle);
 
+    const scroll_offset = try Framework.use_state(usize, 0);
+
     if (item_count > 0) {
-        for (0..item_count) |i| {
+        const available_rows = starting_row;
+        const item_to_render_count = @min(item_count, available_rows);
+        if (item_to_render_count < available_rows) {
+            for (0..starting_row) |_| {
+                try Framework.write("\n");
+            }
+        }
+        if (item_count >= item_to_render_count) {
+            std.debug.assert(scroll_offset.* <= item_count - item_to_render_count);
+        }
+        for (scroll_offset.*..item_to_render_count + scroll_offset.*) |reversed_i| {
+            const i = item_count - 1 - reversed_i;
             if (selected.* == i) {
                 try Framework.write(Framework.CSI ++ Framework.CSIForeground(33));
                 try Framework.write(Framework.CSI ++ Framework.CSIBackground(240));
-                try Framework.write(Framework.CSI ++ Framework.CSIBold);
             } else {
                 try Framework.write(Framework.CSI ++ Framework.CSIForeground(240));
             }
@@ -67,10 +81,10 @@ pub fn list(
             if (selected.* == i) {
                 try Framework.write(Framework.CSI ++ Framework.CSIBackground(240));
             }
-            try render_item(i, render_context);
+            try render_item(i, render_item_context);
             try Framework.write(" ");
-            try Framework.write(Framework.CSI ++ Framework.CSIGraphicReset);
 
+            try Framework.write(Framework.CSI ++ Framework.CSIGraphicReset);
             try Framework.write("\n");
         }
     }

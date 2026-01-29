@@ -412,7 +412,8 @@ fn get_entries(
                 allocator,
                 &.{ tries_absolute_path, entry.name },
             );
-            const dir = try std.fs.openDirAbsolute(path, .{});
+            var dir = try std.fs.openDirAbsolute(path, .{});
+            defer dir.close();
             const stat = try dir.stat();
             const last_access_timestamp: i64 = @intCast(@divTrunc(stat.atime, std.time.ns_per_s));
 

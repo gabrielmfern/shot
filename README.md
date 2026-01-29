@@ -28,7 +28,15 @@ All try names are determined by:
 
 Also check out the `--help` flag.
 
-## Installation
+## Automatic Installation
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/gabrielmfern/shot/main/install.sh | bash
+```
+
+This downloads the binary for your OS from the latest release, and sets your shell up automatically.
+
+## Manual Installation
 
 Requirements:
 - Having Zig 0.15.2 installed

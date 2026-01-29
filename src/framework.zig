@@ -88,23 +88,53 @@ pub fn get_terminal_size() !struct { width: usize, height: usize } {
     try write(CSI ++ CSIRequestCursorPosition);
     try self.stderr.flush();
 
-    var buffer: [(CSI ++ "10000;10000R").len]u8 = undefined;
-    const bytes_read = try self.tty.read(&buffer);
-    const input = buffer[0..bytes_read];
+    // Read until we find the cursor position response (ESC [ row ; col R)
+    // This handles the case where user input is in the buffer before the response
+    var response_buf: [32]u8 = undefined;
+    var response_len: usize = 0;
+    var state: enum { waiting_for_esc, waiting_for_bracket, reading_response } = .waiting_for_esc;
+
+    while (response_len < response_buf.len) {
+        var byte: [1]u8 = undefined;
+        const bytes_read = try self.tty.read(&byte);
+        if (bytes_read == 0) break;
+
+        switch (state) {
+            .waiting_for_esc => {
+                if (byte[0] == '\x1b') {
+                    state = .waiting_for_bracket;
+                }
+                // Discard any other input (user typed characters)
+            },
+            .waiting_for_bracket => {
+                if (byte[0] == '[') {
+                    state = .reading_response;
+                } else {
+                    // Not a CSI sequence, go back to waiting
+                    state = .waiting_for_esc;
+                }
+            },
+            .reading_response => {
+                if (byte[0] == 'R') {
+                    // Found the end of the cursor position response
+                    break;
+                }
+                response_buf[response_len] = byte[0];
+                response_len += 1;
+            },
+        }
+    }
 
     try write(RestoreSavedCursorPosition);
     try self.stderr.flush();
 
-    if (std.mem.indexOf(
-        u8,
-        input,
-        ";",
-    )) |semicolon_index| {
-        const column_string = input[2..semicolon_index];
-        const row_string = input[semicolon_index + 1 .. bytes_read - 1];
+    const response = response_buf[0..response_len];
+    if (std.mem.indexOf(u8, response, ";")) |semicolon_index| {
+        const row_string = response[0..semicolon_index];
+        const col_string = response[semicolon_index + 1 ..];
 
-        const height = try std.fmt.parseInt(usize, column_string, 10);
-        const width = try std.fmt.parseInt(usize, row_string, 10);
+        const height = try std.fmt.parseInt(usize, row_string, 10);
+        const width = try std.fmt.parseInt(usize, col_string, 10);
 
         return .{
             .width = width,

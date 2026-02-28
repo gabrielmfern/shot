@@ -4,6 +4,7 @@ base.rb
 
 # zig stuff
 .zig-cache
+.zig-global-cache
 zig-out
 
 # testing

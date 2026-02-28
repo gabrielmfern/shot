@@ -32,7 +32,7 @@ arena: std.heap.ArenaAllocator,
 
 allocator: std.mem.Allocator,
 stderr: *std.io.Writer,
-tty: std.fs.File,
+tty: Tty,
 
 states: std.ArrayList(*anyopaque),
 /// The current index that will be used for the call of `use_state` in this tick
@@ -58,6 +58,41 @@ pub const Input = union(enum) {
     printable_ascii: u8,
 };
 
+pub const Tty = struct {
+    file: std.fs.File,
+    original_termios: std.posix.termios,
+
+    pub fn init() !@This() {
+        const tty = try std.fs.cwd().openFile(
+            "/dev/tty",
+            .{ .mode = .read_write },
+        );
+        return .{
+            .file = tty,
+            .original_termios = try std.posix.tcgetattr(tty.handle),
+        };
+    }
+
+    pub fn enter_raw_mode(tty: *@This()) !void {
+        var raw = tty.original_termios;
+        raw.lflag.ECHO = false;
+        raw.lflag.ICANON = false;
+        raw.lflag.IEXTEN = false;
+        raw.iflag.IXON = false;
+        raw.iflag.ICRNL = false;
+        raw.iflag.INPCK = false;
+        raw.iflag.ISTRIP = false;
+        try std.posix.tcsetattr(tty.file.handle, .FLUSH, raw);
+    }
+
+    pub fn deinit(tty: *@This()) void {
+        std.posix.tcsetattr(tty.file.handle, .FLUSH, tty.original_termios) catch |err| {
+            std.log.err("Failed to restore original terminal settings: {}", .{err});
+        };
+        tty.file.close();
+    }
+};
+
 var self: @This() = undefined;
 
 /// Allocator is expected to be an Arena that clears all of the data it
@@ -65,7 +100,7 @@ var self: @This() = undefined;
 pub fn init(
     allocator: std.mem.Allocator,
     stderr: *std.io.Writer,
-    tty: std.fs.File,
+    tty: Tty,
 ) !void {
     self = .{
         .arena = std.heap.ArenaAllocator.init(allocator),
@@ -96,7 +131,7 @@ pub fn get_terminal_size() !struct { width: usize, height: usize } {
 
     while (response_len < response_buf.len) {
         var byte: [1]u8 = undefined;
-        const bytes_read = try self.tty.read(&byte);
+        const bytes_read = try self.tty.file.read(&byte);
         if (bytes_read == 0) break;
 
         switch (state) {
@@ -173,7 +208,7 @@ pub fn flush() !void {
 pub fn update() !void {
     if (self.last_input == null) {
         var buffer: [8]u8 = undefined;
-        const bytes_read = try self.tty.read(&buffer);
+        const bytes_read = try self.tty.file.read(&buffer);
 
         var input: ?Input = null;
         if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowDown)) {

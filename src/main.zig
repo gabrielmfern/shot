@@ -261,23 +261,9 @@ pub fn main() !void {
         parsed_args.varying_arguments,
     );
 
-    var tty = try std.fs.cwd().openFile(
-        "/dev/tty",
-        .{ .mode = .read_write },
-    );
-    defer tty.close();
-    const original = try std.posix.tcgetattr(tty.handle);
-    defer std.posix.tcsetattr(tty.handle, .FLUSH, original) catch {};
-    var raw = original;
-    raw.lflag.ECHO = false;
-    raw.lflag.ICANON = false;
-    // raw.lflag.ISIG = false;
-    raw.lflag.IEXTEN = false;
-    raw.iflag.IXON = false;
-    raw.iflag.ICRNL = false;
-    raw.iflag.INPCK = false;
-    raw.iflag.ISTRIP = false;
-    try std.posix.tcsetattr(tty.handle, .FLUSH, raw);
+    var tty = try Framework.Tty.init();
+    defer tty.deinit();
+    try tty.enter_raw_mode();
 
     try Framework.init(allocator, stderr, tty);
 

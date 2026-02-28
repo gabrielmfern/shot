@@ -38,7 +38,6 @@ states: std.ArrayList(*anyopaque),
 /// The current index that will be used for the call of `use_state` in this tick
 state_cursor_index: usize,
 
-tick_input_handlers: std.ArrayList(InputHandler),
 last_input: ?Input,
 
 const InputHandler = struct {
@@ -78,7 +77,6 @@ pub fn init(
         .states = try std.ArrayList(*anyopaque).initCapacity(allocator, 0),
         .state_cursor_index = 0,
 
-        .tick_input_handlers = try std.ArrayList(InputHandler).initCapacity(allocator, 0),
         .last_input = null,
     };
 }
@@ -173,46 +171,38 @@ pub fn flush() !void {
 /// after input, it goes through, this time with `last_input = null` which
 /// makes sure the entire text UI is rendered with respect to the state in sync
 pub fn update() !void {
-    if (self.last_input != null) {
+    if (self.last_input == null) {
+        var buffer: [8]u8 = undefined;
+        const bytes_read = try self.tty.read(&buffer);
+
+        var input: ?Input = null;
+        if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowDown)) {
+            input = Input{ .action = .ArrowDown };
+        } else if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowUp)) {
+            input = Input{ .action = .ArrowUp };
+        } else if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowLeft)) {
+            input = Input{ .action = .ArrowLeft };
+        } else if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowRight)) {
+            input = Input{ .action = .ArrowLeft };
+        } else if (bytes_read == 1 and buffer[0] == 13) {
+            input = Input{ .action = .Enter };
+        } else if (bytes_read == 1 and buffer[0] == 127) {
+            input = Input{ .action = .Backspace };
+        } else if (bytes_read == 1 and buffer[0] >= 32 and buffer[0] <= 126) {
+            input = Input{ .printable_ascii = buffer[0] };
+        }
+
+        self.last_input = input;
+    } else {
         self.last_input = null;
-        return;
     }
+
     if (self.state_cursor_index < self.states.items.len) {
         // yes, this is the same as React
         return error.RulesOfHooksViolated;
     }
     self.state_cursor_index = 0;
-
-    var buffer: [8]u8 = undefined;
-    const bytes_read = try self.tty.read(&buffer);
-
-    var input: ?Input = null;
-    if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowDown)) {
-        input = Input{ .action = .ArrowDown };
-    } else if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowUp)) {
-        input = Input{ .action = .ArrowUp };
-    } else if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowLeft)) {
-        input = Input{ .action = .ArrowLeft };
-    } else if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowRight)) {
-        input = Input{ .action = .ArrowLeft };
-    } else if (bytes_read == 1 and buffer[0] == 13) {
-        input = Input{ .action = .Enter };
-    } else if (bytes_read == 1 and buffer[0] == 127) {
-        input = Input{ .action = .Backspace };
-    } else if (bytes_read == 1 and buffer[0] >= 32 and buffer[0] <= 126) {
-        input = Input{ .printable_ascii = buffer[0] };
-    }
-
-    self.last_input = input;
-
-    if (input != null) {
-        for (self.tick_input_handlers.items) |handler| {
-            try handler.call_handler(handler.context, input.?);
-        }
-    }
-
-    self.tick_input_handlers.clearRetainingCapacity();
-    _ = self.arena.reset(.retain_capacity);
+    defer _ = self.arena.reset(.retain_capacity);
 }
 
 pub fn use_state(T: type, initial_value: T) !*T {

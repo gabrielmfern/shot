@@ -279,6 +279,7 @@ inline fn ReturnType(comptime function: anytype) type {
 }
 
 pub inline fn component(comptime function: anytype, props: anytype) !ReturnType(function) {
+    // TODO: this isn't fully safe safe with respect to removing and adding components
     const Function = @TypeOf(function);
     const function_type_info = @typeInfo(Function);
     if (function_type_info != .@"fn") {

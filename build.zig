@@ -4,13 +4,22 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const nerd = b.createModule(.{
+        .root_source_file = b.path("nerd.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const main = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    }); 
+    main.addImport("nerd", nerd);
+
     const exe = b.addExecutable(.{
         .name = "shot-tui",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = main,
     });
     b.installArtifact(exe);
 

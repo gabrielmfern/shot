@@ -1,26 +1,26 @@
 const std = @import("std");
 
 const Date = @import("main.zig").Date;
-const Framework = @import("framework.zig");
+const nerd = @import("nerd");
 
 pub fn text_input(
     value: *std.ArrayList(u8),
 ) !bool {
     var changed = false;
-    if (Framework.use_last_input()) |input| {
+    if (nerd.use_last_input()) |input| {
         if (input == .action and input.action == .Backspace) {
             _ = value.pop();
             changed = true;
         } else if (input == .printable_ascii) {
             const char = input.printable_ascii;
             if (char != ' ' or value.items.len != 0) {
-                try value.append(Framework.use_allocator(), char);
+                try value.append(nerd.use_allocator(), char);
                 changed = true;
             }
         }
     }
 
-    try Framework.print(" > {s}", .{value.items});
+    try nerd.print(" > {s}", .{value.items});
 
     return changed;
 }
@@ -36,14 +36,14 @@ pub fn list(props: anytype) !void {
         context: @TypeOf(render_item_context),
     ) anyerror!void = props.render_item;
 
-    const scroll_offset = try Framework.use_state(usize, 0);
+    const scroll_offset = try nerd.use_state(usize, 0);
 
     if (item_count > 0) {
         const available_rows = starting_row;
         const item_to_render_count = @min(item_count, available_rows);
         if (item_to_render_count < available_rows) {
             for (0..starting_row) |_| {
-                try Framework.write("\n");
+                try nerd.write("\n");
             }
         }
         if (item_count >= item_to_render_count) {
@@ -52,26 +52,26 @@ pub fn list(props: anytype) !void {
         for (scroll_offset.*..item_to_render_count + scroll_offset.*) |reversed_i| {
             const i = item_count - 1 - reversed_i;
             if (selected.* == i) {
-                try Framework.write(Framework.CSI ++ Framework.CSIForeground(33));
-                try Framework.write(Framework.CSI ++ Framework.CSIBackground(240));
+                try nerd.write(nerd.CSI ++ nerd.CSIForeground(33));
+                try nerd.write(nerd.CSI ++ nerd.CSIBackground(240));
             } else {
-                try Framework.write(Framework.CSI ++ Framework.CSIForeground(240));
+                try nerd.write(nerd.CSI ++ nerd.CSIForeground(240));
             }
-            try Framework.write("▌ ");
-            try Framework.write(Framework.CSI ++ Framework.CSIGraphicReset);
+            try nerd.write("▌ ");
+            try nerd.write(nerd.CSI ++ nerd.CSIGraphicReset);
 
             if (selected.* == i) {
-                try Framework.write(Framework.CSI ++ Framework.CSIBackground(240));
+                try nerd.write(nerd.CSI ++ nerd.CSIBackground(240));
             }
             try render_item(i, render_item_context);
-            try Framework.write(" ");
+            try nerd.write(" ");
 
-            try Framework.write(Framework.CSI ++ Framework.CSIGraphicReset);
-            try Framework.write("\n");
+            try nerd.write(nerd.CSI ++ nerd.CSIGraphicReset);
+            try nerd.write("\n");
         }
     }
 
-    if (Framework.use_last_input()) |input| {
+    if (nerd.use_last_input()) |input| {
         if (input == .action) {
             if (input.action == .ArrowDown) {
                 selected.* = if (selected.* == 0) item_count - 1 else selected.* - 1;
@@ -126,34 +126,34 @@ pub fn time_since(since: i64) !void {
     const now = std.time.timestamp();
     switch (Time.calculate(now - since)) {
         .moments => {
-            try Framework.write("moments ago");
+            try nerd.write("moments ago");
         },
         .minutes => |minutes| {
             if (minutes > 1) {
-                try Framework.print("{d} minutes ago", .{minutes});
+                try nerd.print("{d} minutes ago", .{minutes});
             } else {
-                try Framework.write("a minute ago");
+                try nerd.write("a minute ago");
             }
         },
         .hours => |hours| {
             if (hours > 1) {
-                try Framework.print("{d} hours ago", .{hours});
+                try nerd.print("{d} hours ago", .{hours});
             } else {
-                try Framework.write("an hour ago");
+                try nerd.write("an hour ago");
             }
         },
         .days => |days| {
             if (days > 1) {
-                try Framework.print("{d} days ago", .{days});
+                try nerd.print("{d} days ago", .{days});
             } else {
-                try Framework.write("a day ago");
+                try nerd.write("a day ago");
             }
         },
         .months => |months| {
             if (months > 1) {
-                try Framework.print("{d} months ago", .{months});
+                try nerd.print("{d} months ago", .{months});
             } else {
-                try Framework.write("a month ago");
+                try nerd.write("a month ago");
             }
         },
     }

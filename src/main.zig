@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Framework = @import("framework.zig");
+const nerd = @import("nerd");
 const components = @import("components.zig");
 const time_since = components.time_since;
 const text_input = components.text_input;
@@ -261,19 +261,19 @@ pub fn main() !void {
         parsed_args.varying_arguments,
     );
 
-    var tty = try Framework.Tty.init();
+    var tty = try nerd.Tty.init();
     defer tty.deinit();
     try tty.enter_raw_mode();
 
-    try Framework.init(allocator, stderr, tty);
+    try nerd.init(allocator, stderr, tty);
 
     var search_query_buffer = std.ArrayList(u8).fromOwnedSlice(
         parsed_args.varying_arguments,
     );
 
     while (true) {
-        try Framework.write(Framework.CSI ++ Framework.CSICursorToStart);
-        try Framework.write(Framework.CSI ++ Framework.CSIClearScreen);
+        try nerd.write(nerd.CSI ++ nerd.CSICursorToStart);
+        try nerd.write(nerd.CSI ++ nerd.CSIClearScreen);
 
         const can_create = search_query_buffer.items.len > 0;
         const try_name_from_search = try TryEntry.generate_unique_dir_name(
@@ -282,9 +282,9 @@ pub fn main() !void {
             tries_absolute_path,
         );
 
-        const terminal_size = try Framework.get_terminal_size();
+        const terminal_size = try nerd.get_terminal_size();
 
-        const selected = try Framework.use_state(usize, 0);
+        const selected = try nerd.use_state(usize, 0);
 
         try list(.{
             .selected = selected,
@@ -298,27 +298,27 @@ pub fn main() !void {
                 ) anyerror!void {
                     const entries, const new_entry_name = context;
                     if (index == 0) {
-                        try Framework.print("Create {s}", .{new_entry_name});
+                        try nerd.print("Create {s}", .{new_entry_name});
                     } else {
                         const entry: TryEntry = entries[index - 1];
-                        try Framework.write(Framework.CSI ++ Framework.CSIDim);
-                        try Framework.write(entry.name[0.."YYYY-mm-dd-".len]);
-                        try Framework.write(Framework.CSI ++ Framework.CSIDimAndBoldReset);
-                        try Framework.write(entry.name["YYYY-mm-dd-".len..]);
-                        try Framework.write(Framework.CSI ++ Framework.CSIDim);
-                        try Framework.write(" (accessed ");
+                        try nerd.write(nerd.CSI ++ nerd.CSIDim);
+                        try nerd.write(entry.name[0.."YYYY-mm-dd-".len]);
+                        try nerd.write(nerd.CSI ++ nerd.CSIDimAndBoldReset);
+                        try nerd.write(entry.name["YYYY-mm-dd-".len..]);
+                        try nerd.write(nerd.CSI ++ nerd.CSIDim);
+                        try nerd.write(" (accessed ");
                         try time_since(entry.last_access_timestamp);
-                        try Framework.write(")");
-                        try Framework.write(Framework.CSI ++ Framework.CSIDimAndBoldReset);
+                        try nerd.write(")");
+                        try nerd.write(nerd.CSI ++ nerd.CSIDimAndBoldReset);
                     }
                 }
             }).render_entry,
         });
 
-        try Framework.write(" " ++ "─" ** 40 ++ "\n");
+        try nerd.write(" " ++ "─" ** 40 ++ "\n");
 
         if (try text_input(&search_query_buffer)) {
-            try get_entries(Framework.use_allocator(), tries_absolute_path, &tries_iterator, &try_entries, search_query_buffer.items);
+            try get_entries(nerd.use_allocator(), tries_absolute_path, &tries_iterator, &try_entries, search_query_buffer.items);
             if (try_entries.items.len > 0) {
                 selected.* = 0;
             }
@@ -326,7 +326,7 @@ pub fn main() !void {
 
         try stderr.flush();
 
-        if (Framework.use_last_input()) |last_input| {
+        if (nerd.use_last_input()) |last_input| {
             if (last_input == .action and last_input.action == .Enter) {
                 if (can_create and selected.* == try_entries.items.len) {
                     const path = try std.fs.path.join(allocator, &.{
@@ -357,7 +357,7 @@ pub fn main() !void {
             }
         }
 
-        try Framework.update();
+        try nerd.update();
     }
 }
 

@@ -34,15 +34,24 @@ allocator: std.mem.Allocator,
 stderr: *std.io.Writer,
 tty: Tty,
 
-states: std.ArrayList(*anyopaque),
-/// The current index that will be used for the call of `use_state` in this tick
-state_cursor_index: usize,
+component_states: std.ArrayList(ComponentState),
+component_cursor_index: usize,
+component_resolution_state: ?ComponentResolutionState,
 
 last_input: ?Input,
 
 const InputHandler = struct {
     context: *anyopaque,
     call_handler: *const fn (context: *anyopaque, input: Input) anyerror!void,
+};
+
+const ComponentState = struct {
+    states: std.ArrayList(*anyopaque),
+};
+
+const ComponentResolutionState = struct {
+    component_index: usize,
+    state_cursor_index: usize,
 };
 
 /// This only includes the few keys that we're using, it does not at all, include all of the possible values
@@ -109,8 +118,9 @@ pub fn init(
         .stderr = stderr,
         .tty = tty,
 
-        .states = try std.ArrayList(*anyopaque).initCapacity(allocator, 0),
-        .state_cursor_index = 0,
+        .component_states = try std.ArrayList(ComponentState).initCapacity(allocator, 0),
+        .component_cursor_index = 0,
+        .component_resolution_state = null,
 
         .last_input = null,
     };
@@ -232,25 +242,89 @@ pub fn update() !void {
         self.last_input = null;
     }
 
-    if (self.state_cursor_index < self.states.items.len) {
-        // yes, this is the same as React
+    if (self.component_cursor_index < self.component_states.items.len) {
         return error.RulesOfHooksViolated;
     }
-    self.state_cursor_index = 0;
+    self.component_cursor_index = 0;
     defer _ = self.arena.reset(.retain_capacity);
 }
 
 pub fn use_state(T: type, initial_value: T) !*T {
-    defer self.state_cursor_index += 1;
-    if (self.state_cursor_index < self.states.items.len) {
-        return @ptrCast(@alignCast(self.states.items[self.state_cursor_index]));
-    } else {
+    if (self.component_resolution_state) |*component_resolution_state| {
+        const component_state = &self.component_states.items[component_resolution_state.component_index];
+        defer component_resolution_state.state_cursor_index += 1;
+
+        if (component_resolution_state.state_cursor_index < component_state.states.items.len) {
+            return @ptrCast(@alignCast(component_state.states.items[component_resolution_state.state_cursor_index]));
+        }
+
         const actual_state = try self.allocator.create(T);
         actual_state.* = initial_value;
-        try self.states.append(self.allocator, @ptrCast(@alignCast(actual_state)));
+        try component_state.states.append(self.allocator, @ptrCast(@alignCast(actual_state)));
 
         return actual_state;
     }
+
+    return error.NoComponentContext;
+}
+
+inline fn ReturnType(comptime function: anytype) type {
+    const Function = @TypeOf(function);
+    const function_type_info = @typeInfo(Function);
+    if (function_type_info != .@"fn") {
+        @compileError("expected function to be a `fn`, but found " ++ @typeName(Function));
+    }
+    if (function_type_info.@"fn".return_type) |ReturnTypeT| {
+        const return_type_info = @typeInfo(ReturnTypeT);
+        if (return_type_info == .error_union) {
+            return return_type_info.error_union.payload;
+        }
+        return ReturnTypeT;
+    }
+    return void;
+}
+
+pub inline fn component(comptime function: anytype, props: anytype) !ReturnType(function) {
+    const Function = @TypeOf(function);
+    const function_type_info = @typeInfo(Function);
+    if (function_type_info != .@"fn") {
+        @compileError("expected function to be a `fn`, but found " ++ @typeName(Function));
+    }
+    if (function_type_info.@"fn".params.len != 1) {
+        @compileError(
+            "function components can only have one parameter `props`, found " ++ std.fmt.comptimePrint("{d}", .{function_type_info.@"fn".params.len}),
+        );
+    }
+
+    const component_index = self.component_cursor_index;
+    self.component_cursor_index += 1;
+
+    if (component_index >= self.component_states.items.len) {
+        try self.component_states.append(self.allocator, .{
+            .states = try std.ArrayList(*anyopaque).initCapacity(self.allocator, 0),
+        });
+    }
+
+    const previous_component_resolution_state = self.component_resolution_state;
+    self.component_resolution_state = .{
+        .component_index = component_index,
+        .state_cursor_index = 0,
+    };
+    defer self.component_resolution_state = previous_component_resolution_state;
+
+    const raw_return_value = function(props);
+    const return_value: ReturnType(function) = switch (@typeInfo(@TypeOf(raw_return_value))) {
+        .error_union => try raw_return_value,
+        else => raw_return_value,
+    };
+
+    const used_state_count = self.component_resolution_state.?.state_cursor_index;
+    const component_state = self.component_states.items[component_index];
+    if (used_state_count < component_state.states.items.len) {
+        return error.RulesOfHooksViolated;
+    }
+
+    return return_value;
 }
 
 pub fn use_last_input() ?Input {

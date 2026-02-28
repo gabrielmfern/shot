@@ -272,93 +272,131 @@ pub fn main() !void {
     );
 
     while (true) {
-        try nerd.write(nerd.CSI ++ nerd.CSICursorToStart);
-        try nerd.write(nerd.CSI ++ nerd.CSIClearScreen);
-
-        const can_create = search_query_buffer.items.len > 0;
-        const try_name_from_search = try TryEntry.generate_unique_dir_name(
-            allocator,
-            search_query_buffer.items,
-            tries_absolute_path,
-        );
-
-        const terminal_size = try nerd.get_terminal_size();
-
-        const selected = try nerd.use_state(usize, 0);
-
-        try list(.{
-            .selected = selected,
-            .item_count = if (can_create) try_entries.items.len + 1 else try_entries.items.len,
-            .starting_row = terminal_size.height - 2,
-            .render_item_context = .{ try_entries.items, try_name_from_search },
-            .render_item = (struct {
-                fn render_entry(
-                    index: usize,
-                    context: std.meta.Tuple(&.{ []TryEntry, []const u8 }),
-                ) anyerror!void {
-                    const entries, const new_entry_name = context;
-                    if (index == 0) {
-                        try nerd.print("Create {s}", .{new_entry_name});
-                    } else {
-                        const entry: TryEntry = entries[index - 1];
-                        try nerd.write(nerd.CSI ++ nerd.CSIDim);
-                        try nerd.write(entry.name[0.."YYYY-mm-dd-".len]);
-                        try nerd.write(nerd.CSI ++ nerd.CSIDimAndBoldReset);
-                        try nerd.write(entry.name["YYYY-mm-dd-".len..]);
-                        try nerd.write(nerd.CSI ++ nerd.CSIDim);
-                        try nerd.write(" (accessed ");
-                        try time_since(entry.last_access_timestamp);
-                        try nerd.write(")");
-                        try nerd.write(nerd.CSI ++ nerd.CSIDimAndBoldReset);
-                    }
-                }
-            }).render_entry,
+        const should_exit = try nerd.component(app, AppProps{
+            .allocator = allocator,
+            .tries_absolute_path = tries_absolute_path,
+            .tries_iterator = &tries_iterator,
+            .try_entries = &try_entries,
+            .search_query_buffer = &search_query_buffer,
+            .parsed_args = &parsed_args,
+            .stdout = stdout,
+            .stderr = stderr,
         });
 
-        try nerd.write(" " ++ "─" ** 40 ++ "\n");
-
-        if (try text_input(&search_query_buffer)) {
-            try get_entries(nerd.use_allocator(), tries_absolute_path, &tries_iterator, &try_entries, search_query_buffer.items);
-            if (try_entries.items.len > 0) {
-                selected.* = 0;
-            }
-        }
-
-        try stderr.flush();
-
-        if (nerd.use_last_input()) |last_input| {
-            if (last_input == .action and last_input.action == .Enter) {
-                if (can_create and selected.* == try_entries.items.len) {
-                    const path = try std.fs.path.join(allocator, &.{
-                        tries_absolute_path,
-                        try_name_from_search,
-                    });
-                    if (parsed_args.flags.pipe != null) {
-                        _ = try stdout.print("echo {s}", .{path});
-                        try stdout.flush();
-                        break;
-                    }
-                    try std.fs.makeDirAbsolute(path);
-
-                    try stdout.print("cd {s}", .{path});
-                    try stdout.flush();
-                    break;
-                } else if (try_entries.items.len > 0) {
-                    const path = try_entries.items[selected.*].path;
-                    if (parsed_args.flags.pipe != null) {
-                        _ = try stdout.print("echo {s}", .{path});
-                        try stdout.flush();
-                        break;
-                    }
-                    try stdout.print("cd {s}", .{path});
-                    try stdout.flush();
-                    break;
-                }
-            }
+        if (should_exit) {
+            break;
         }
 
         try nerd.update();
     }
+}
+
+const AppProps = struct {
+    allocator: std.mem.Allocator,
+    tries_absolute_path: []const u8,
+    tries_iterator: *std.fs.Dir.Iterator,
+    try_entries: *std.ArrayList(TryEntry),
+    search_query_buffer: *std.ArrayList(u8),
+    parsed_args: *const Args,
+    stdout: *std.io.Writer,
+    stderr: *std.io.Writer,
+};
+
+fn app(props: AppProps) !bool {
+    try nerd.write(nerd.CSI ++ nerd.CSICursorToStart);
+    try nerd.write(nerd.CSI ++ nerd.CSIClearScreen);
+
+    const can_create = props.search_query_buffer.items.len > 0;
+    const try_name_from_search = try TryEntry.generate_unique_dir_name(
+        props.allocator,
+        props.search_query_buffer.items,
+        props.tries_absolute_path,
+    );
+
+    const terminal_size = try nerd.get_terminal_size();
+    const selected = try nerd.use_state(usize, 0);
+
+    try nerd.component(list, .{
+        .selected = selected,
+        .item_count = if (can_create) props.try_entries.items.len + 1 else props.try_entries.items.len,
+        .starting_row = terminal_size.height - 2,
+        .render_item_context = .{ props.try_entries.items, try_name_from_search },
+        .render_item = (struct {
+            fn render_entry(
+                index: usize,
+                context: std.meta.Tuple(&.{ []TryEntry, []const u8 }),
+            ) anyerror!void {
+                const entries, const new_entry_name = context;
+                if (index == 0) {
+                    try nerd.print("Create {s}", .{new_entry_name});
+                } else {
+                    const entry: TryEntry = entries[index - 1];
+                    try nerd.write(nerd.CSI ++ nerd.CSIDim);
+                    try nerd.write(entry.name[0.."YYYY-mm-dd-".len]);
+                    try nerd.write(nerd.CSI ++ nerd.CSIDimAndBoldReset);
+                    try nerd.write(entry.name["YYYY-mm-dd-".len..]);
+                    try nerd.write(nerd.CSI ++ nerd.CSIDim);
+                    try nerd.write(" (accessed ");
+                    try time_since(entry.last_access_timestamp);
+                    try nerd.write(")");
+                    try nerd.write(nerd.CSI ++ nerd.CSIDimAndBoldReset);
+                }
+            }
+        }).render_entry,
+    });
+
+    try nerd.write(" " ++ "─" ** 40 ++ "\n");
+
+    if (try nerd.component(text_input, props.search_query_buffer)) {
+        try get_entries(
+            nerd.use_allocator(),
+            props.tries_absolute_path,
+            props.tries_iterator,
+            props.try_entries,
+            props.search_query_buffer.items,
+        );
+        if (props.try_entries.items.len > 0) {
+            selected.* = 0;
+        }
+    }
+
+    try props.stderr.flush();
+
+    if (nerd.use_last_input()) |last_input| {
+        if (last_input == .action and last_input.action == .Enter) {
+            if (can_create and selected.* == props.try_entries.items.len) {
+                const path = try std.fs.path.join(props.allocator, &.{
+                    props.tries_absolute_path,
+                    try_name_from_search,
+                });
+                if (props.parsed_args.flags.pipe != null) {
+                    _ = try props.stdout.print("echo {s}", .{path});
+                    try props.stdout.flush();
+                    return true;
+                }
+                try std.fs.makeDirAbsolute(path);
+
+                try props.stdout.print("cd {s}", .{path});
+                try props.stdout.flush();
+                return true;
+            }
+
+            if (props.try_entries.items.len > 0) {
+                const path = props.try_entries.items[selected.*].path;
+                if (props.parsed_args.flags.pipe != null) {
+                    _ = try props.stdout.print("echo {s}", .{path});
+                    try props.stdout.flush();
+                    return true;
+                }
+
+                try props.stdout.print("cd {s}", .{path});
+                try props.stdout.flush();
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 fn get_entries(

@@ -40,11 +40,6 @@ component_resolution_state: ?ComponentResolutionState,
 
 last_input: ?Input,
 
-const InputHandler = struct {
-    context: *anyopaque,
-    call_handler: *const fn (context: *anyopaque, input: Input) anyerror!void,
-};
-
 const ComponentState = struct {
     states: std.ArrayList(*anyopaque),
 };

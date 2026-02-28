@@ -51,6 +51,8 @@ pub const Input = union(enum) {
     action: enum {
         ArrowDown,
         ArrowUp,
+        ArrowLeft,
+        ArrowRight,
         Enter,
         Backspace,
     },
@@ -167,7 +169,14 @@ pub fn flush() !void {
     try self.stderr.flush();
 }
 
-pub fn tick() !void {
+/// Generally is just blocks until there's user input. But, if it's running
+/// after input, it goes through, this time with `last_input = null` which
+/// makes sure the entire text UI is rendered with respect to the state in sync
+pub fn update() !void {
+    if (self.last_input != null) {
+        self.last_input = null;
+        return;
+    }
     if (self.state_cursor_index < self.states.items.len) {
         // yes, this is the same as React
         return error.RulesOfHooksViolated;
@@ -182,6 +191,10 @@ pub fn tick() !void {
         input = Input{ .action = .ArrowDown };
     } else if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowUp)) {
         input = Input{ .action = .ArrowUp };
+    } else if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowLeft)) {
+        input = Input{ .action = .ArrowLeft };
+    } else if (bytes_read >= 3 and std.mem.eql(u8, buffer[0..3], CSI ++ CSIArrowRight)) {
+        input = Input{ .action = .ArrowLeft };
     } else if (bytes_read == 1 and buffer[0] == 13) {
         input = Input{ .action = .Enter };
     } else if (bytes_read == 1 and buffer[0] == 127) {
@@ -217,25 +230,4 @@ pub fn use_state(T: type, initial_value: T) !*T {
 
 pub fn use_last_input() ?Input {
     return self.last_input;
-}
-
-pub fn use_input_handler(
-    context: anytype,
-    comptime handler: fn (context: *@TypeOf(context), input: Input) anyerror!void,
-) !void {
-    const allocator = self.arena.allocator();
-    const owned_context = try allocator.create(@TypeOf(context));
-    owned_context.* = context;
-
-    try self.tick_input_handlers.append(
-        self.allocator,
-        .{
-            .context = @ptrCast(@alignCast(owned_context)),
-            .call_handler = &(struct {
-                fn call_handler(any_ctx: *anyopaque, input: Input) anyerror!void {
-                    try handler(@ptrCast(@alignCast(any_ctx)), input);
-                }
-            }).call_handler,
-        },
-    );
 }

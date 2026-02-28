@@ -331,38 +331,14 @@ pub fn main() !void {
 
         try Framework.write(" " ++ "─" ** 40 ++ "\n");
 
-        const search_changed_context = .{
-            .tries_absolute_path = tries_absolute_path,
-            .tries_iterator = &tries_iterator,
-            .try_entries = &try_entries,
-            .search_query_buffer = search_query_buffer,
-            .selected = selected,
-        };
-        try text_input(
-            &search_query_buffer,
-            search_changed_context,
-            (struct {
-                fn on_change(
-                    context: @TypeOf(search_changed_context),
-                    value: *std.ArrayList(u8),
-                ) anyerror!void {
-                    try get_entries(
-                        Framework.use_allocator(),
-                        context.tries_absolute_path,
-                        context.tries_iterator,
-                        context.try_entries,
-                        value.items,
-                    );
-                    if (context.try_entries.items.len > 0) {
-                        context.selected.* = 0;
-                    }
-                }
-            }).on_change,
-        );
+        if (try text_input(&search_query_buffer)) {
+            try get_entries(Framework.use_allocator(), tries_absolute_path, &tries_iterator, &try_entries, search_query_buffer.items);
+            if (try_entries.items.len > 0) {
+                selected.* = 0;
+            }
+        }
 
         try stderr.flush();
-
-        try Framework.tick();
 
         if (Framework.use_last_input()) |last_input| {
             if (last_input == .action and last_input.action == .Enter) {
@@ -394,6 +370,8 @@ pub fn main() !void {
                 }
             }
         }
+
+        try Framework.update();
     }
 }
 

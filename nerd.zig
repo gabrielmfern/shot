@@ -34,7 +34,7 @@ allocator: std.mem.Allocator,
 stderr: *std.io.Writer,
 tty: Tty,
 
-component_states: std.ArrayList(ComponentState),
+component_states: std.AutoHashMap(u64, ComponentState),
 component_cursor_index: usize,
 component_resolution_state: ?ComponentResolutionState,
 
@@ -45,7 +45,7 @@ const ComponentState = struct {
 };
 
 const ComponentResolutionState = struct {
-    component_index: usize,
+    component_key: u64,
     state_cursor_index: usize,
 };
 
@@ -113,7 +113,7 @@ pub fn init(
         .stderr = stderr,
         .tty = tty,
 
-        .component_states = try std.ArrayList(ComponentState).initCapacity(allocator, 0),
+        .component_states = .init(allocator),
         .component_cursor_index = 0,
         .component_resolution_state = null,
 
@@ -237,16 +237,15 @@ pub fn update() !void {
         self.last_input = null;
     }
 
-    if (self.component_cursor_index < self.component_states.items.len) {
-        return error.RulesOfHooksViolated;
-    }
     self.component_cursor_index = 0;
     defer _ = self.arena.reset(.retain_capacity);
 }
 
 pub fn use_state(T: type, initial_value: T) !*T {
     if (self.component_resolution_state) |*component_resolution_state| {
-        const component_state = &self.component_states.items[component_resolution_state.component_index];
+        const component_state = self.component_states.getPtr(component_resolution_state.component_key) orelse {
+            return error.NoComponentContext;
+        };
         defer component_resolution_state.state_cursor_index += 1;
 
         if (component_resolution_state.state_cursor_index < component_state.states.items.len) {
@@ -290,19 +289,28 @@ pub inline fn component(comptime function: anytype, props: anytype) !ReturnType(
             "function components can only have one parameter `props`, found " ++ std.fmt.comptimePrint("{d}", .{function_type_info.@"fn".params.len}),
         );
     }
+    const function_name = @typeName(Function);
+    const function_identifier: []const u8 = if (function_type_info.@"fn".is_generic)
+        function_name[0..]
+    else
+        std.mem.asBytes(&@intFromPtr(&function));
 
-    const component_index = self.component_cursor_index;
+    var key_hasher = std.hash.Wyhash.init(0);
+    key_hasher.update(std.mem.asBytes(&self.component_cursor_index));
+    key_hasher.update(function_identifier);
+    const component_key = key_hasher.final();
     self.component_cursor_index += 1;
 
-    if (component_index >= self.component_states.items.len) {
-        try self.component_states.append(self.allocator, .{
+    const component_state_result = try self.component_states.getOrPut(component_key);
+    if (!component_state_result.found_existing) {
+        component_state_result.value_ptr.* = .{
             .states = try std.ArrayList(*anyopaque).initCapacity(self.allocator, 0),
-        });
+        };
     }
 
     const previous_component_resolution_state = self.component_resolution_state;
     self.component_resolution_state = .{
-        .component_index = component_index,
+        .component_key = component_key,
         .state_cursor_index = 0,
     };
     defer self.component_resolution_state = previous_component_resolution_state;
@@ -314,7 +322,9 @@ pub inline fn component(comptime function: anytype, props: anytype) !ReturnType(
     };
 
     const used_state_count = self.component_resolution_state.?.state_cursor_index;
-    const component_state = self.component_states.items[component_index];
+    const component_state = self.component_states.get(component_key) orelse {
+        return error.NoComponentContext;
+    };
     if (used_state_count < component_state.states.items.len) {
         return error.RulesOfHooksViolated;
     }
